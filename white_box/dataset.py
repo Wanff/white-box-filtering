@@ -7,11 +7,15 @@ import requests
 from tqdm import tqdm 
 import torch 
 import numpy as np
+import json 
 
 from sklearn.model_selection import train_test_split
 from datasets import Dataset, load_dataset, load_from_disk, DatasetDict
 from transformers import AutoTokenizer
 from dataclasses import dataclass
+
+from white_box.utils import eval_completions, ceildiv, gen_pile_data
+from white_box.model_wrapper import ModelWrapper
 
 #* clean memorized data 
 def clean_data(data : Union[List[str], List[int]], tokenizer : AutoTokenizer, 
@@ -132,14 +136,26 @@ class PromptDist:
     idxs : List[int]
     path_to_states : str
     path_to_metadata : str
+
+def create_prompt_dist_from_metadata_path(path_to_metadata : str,
+                                     condition : Callable,
+                                     col_name : str = 'tok_by_tok_sim',
+                                     ) -> PromptDist:
+    metadata = pd.read_csv(path_to_metadata)
+    path_to_states = path_to_metadata.replace('metadata.csv', 'all_hidden_states.pt')
+    idxs = metadata[condition(metadata[col_name])].index.tolist()
     
+    return PromptDist(idxs = idxs, path_to_states = path_to_states, path_to_metadata = path_to_metadata)
+
 def create_prompt_dist_from_metadata(metadata : pd.DataFrame, 
                                      path_to_states : str, 
                                      path_to_metadata : str,
                                      condition : Callable,
                                      col_name : str = 'tok_by_tok_sim',
                                      ) -> PromptDist:
+    
     idxs = metadata[condition(metadata[col_name])].index.tolist()
+    
     return PromptDist(idxs = idxs, path_to_states = path_to_states, path_to_metadata = path_to_metadata)
 
 def less_than_60_percent(x):
@@ -149,7 +165,12 @@ def equal_100_percent(x):
     return x == 1
 
 class ActDataset:
-    def __init__(self, pos : List[PromptDist], neg : List[PromptDist]):
+    def __init__(self, pos : Union[PromptDist, List[PromptDist]], neg : Union[PromptDist, List[PromptDist]]):
+        if not isinstance(pos, List):
+            pos = [pos]
+        if not isinstance(neg, List):
+            neg = [neg]
+        
         self.pos = pos
         self.neg = neg
         
@@ -157,8 +178,15 @@ class ActDataset:
         self.y = None
     
     def instantiate(self):
-        pos_states = torch.cat([torch.load(x.path_to_states)[x.idxs] for x in self.pos])
-        neg_states = torch.cat([torch.load(x.path_to_states)[x.idxs] for x in self.neg])
+        if self.pos:
+            pos_states = torch.cat([torch.load(x.path_to_states)[x.idxs] for x in self.pos])
+        else:
+            pos_states = torch.tensor([])
+        
+        if self.neg:
+            neg_states = torch.cat([torch.load(x.path_to_states)[x.idxs] for x in self.neg])
+        else:
+            neg_states = torch.tensor([])
         
         self.X = torch.cat([pos_states, neg_states]).cpu().float()
         self.y = torch.cat([torch.ones(len(pos_states)), torch.zeros(len(neg_states))])
@@ -196,28 +224,102 @@ class ActDataset:
 
 #* generalization datasets
 
-def gen_fuzzy_pos_dataset(dataset : Dataset):
+def gen_fuzzy_pos_dataset(metadata_paths : Union[List[str], str]) -> ActDataset: 
     """
     Generate a dataset of fuzzily memorized text by filtering for rows that have tok_by_tok_similarity between [0.9, 1). 
     """
+    def between_90_and_100_percent(x):
+        return (0.9 <= x) & (x < 1)
     
-    pass 
+    if isinstance(metadata_paths, str):
+        metadata_paths = [metadata_paths]
+        
+    prompt_dists = [create_prompt_dist_from_metadata_path(metadata_path, between_90_and_100_percent) for metadata_path in metadata_paths]
+    fuzzy_pos_dataset = ActDataset(prompt_dists, [])
+    fuzzy_pos_dataset.instantiate()
+    
+    return fuzzy_pos_dataset
 
-def gen_prefix_dataset(dataset : Dataset):
+def get_quotes(save_path = '../data/all_quotes.json'):
+    """generates a bunch of quotes for the quotes dataset, starting off with a quotes.json file taken from here:
+    https://github.com/andyzoujm/representation-engineering/blob/main/data/memorization/quotes/popular_quotes.json
+
+    Args:
+        save_path (str, optional): Defaults to '../data/quotes.json'.
     """
-    Generate a dataset of prefixed data by taking the normal dataset and adding prefixes from the pile to the data
-    """
-    pass
-
-def gen_quotes_dataset(dataset : Dataset):
-
     all_quotes = []
-    for i in tqdm(range(100)):
+    for i in tqdm(range(500)):
         quotes = requests.get('https://zenquotes.io/api/quotes').json()
         all_quotes.extend([q['q'] for q in quotes])
         time.sleep(1)
         
         if i % 10 == 0:
-            time.sleep(5)
+            time.sleep(7)
+            
     all_quotes = [quote for quote in all_quotes if quote != "Too many requests. Obtain an auth key for unlimited access."]
-    len(all_quotes) 
+    
+    prev_quotes = json.load(open(save_path, 'rb'))
+    
+    all_quotes = list(set(prev_quotes + all_quotes))
+    
+    with open(save_path, 'w') as file:
+        json.dump(all_quotes, file, indent=4)        
+        
+    return all_quotes
+
+
+def gen_quotes_metadata(mw : ModelWrapper,
+                        path_to_quotes : str = "../data/quotes.json") -> pd.DataFrame:
+    all_quotes = json.load(open(path_to_quotes, 'rb'))
+    
+    quote_tok_out = mw.tokenizer(all_quotes, return_tensors = 'pt', padding = True, truncation = True, max_length = 64)
+
+    quote_lens = quote_tok_out['attention_mask'].sum(dim = 1)
+    quote_lens_set = set(quote_lens.tolist())
+    
+    quote_lens_w_index = np.array([(i, len_) for i, len_ in enumerate(quote_lens)])
+    
+    df = {
+        'quote_toks' : [],
+        'quote_strs' : [],
+        'gen_toks' : [],
+        'gen_strs' : [],
+        'tok_by_tok_sim' : [],
+        'char_by_char_sim' : [],
+        'lev_distance' : [],
+        'quote_len' : []
+    }
+    
+    for quote_len in tqdm(quote_lens_set):
+        quote_indices = quote_lens_w_index[quote_lens_w_index[:,1] == quote_len][:,0]
+        quote_toks = torch.stack([quote_tok_out['input_ids'][i] for i in quote_indices])
+        quote_strs = [all_quotes[i] for i in quote_indices]
+        
+        quotes_first_half = quote_toks[:,: ceildiv(quote_len, 2)]
+        
+        out = mw.batch_generate_autoreg(quotes_first_half, max_new_tokens = quote_len // 2, output_tokens = True)
+        gen_toks = out['tokens'].tolist()
+        gen_strs = out['generations']
+        evals = eval_completions(gen_strs, quote_strs, sim_types = ['char', 'tok', 'lev'], tokenizer = mw.tokenizer, return_mean = False)
+        
+        df['quote_toks'].extend(quote_toks.tolist())
+        df['quote_strs'].extend(quote_strs)
+        df['gen_toks'].extend(gen_toks)
+        df['gen_strs'].extend(gen_strs)
+        df['tok_by_tok_sim'].extend(evals['tok_by_tok_sim'])
+        df['char_by_char_sim'].extend(evals['char_by_char_sim'])
+        df['lev_distance'].extend(evals['lev_distance'])
+        df['quote_len'].extend([quote_len]*len(quote_indices))
+    
+    return pd.DataFrame.from_dict(df)
+    
+def gen_prefix_dataset_strings(prompts : List[str], tokenizer : AutoTokenizer, prefix_len : int = 50) -> List[str]:
+    """
+    Generate a dataset of prefixed data by taking the normal dataset and adding prefixes from the pile to the data
+    """
+    pile_data = gen_pile_data(N = len(prompts), tokenizer = tokenizer, 
+                              min_n_toks = prefix_len, 
+                              max_n_toks = prefix_len, 
+                              split = "validation")
+    
+    return [pile_prefix + prompt  for prompt, pile_prefix in zip(prompts, pile_data)]

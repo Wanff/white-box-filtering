@@ -1,5 +1,5 @@
 import re
-from typing import List, Optional, Tuple, Dict
+from typing import List, Union, Optional, Tuple, Dict
 
 import numpy as np
 import torch
@@ -19,8 +19,26 @@ def ceildiv(a, b):
     #https://stackoverflow.com/questions/14822184/is-there-a-ceiling-equivalent-of-operator-in-python
     return -(a // -b)
 
-def gen_pile_data(N : int, tokenizer : AutoTokenizer, min_n_toks : int = None, split='train'): 
+def gen_pile_data(N : int, tokenizer : AutoTokenizer, min_n_toks : int = None, max_n_toks : int = None, split='train'): 
+    """
+    supports : min_n_toks and max_n_toks, truncates text if it is too long, and rejects if too short
+    just max_n_toks, truncates text if it is too long
+    just min_n_toks, rejects if too short
+    if none, accept everything 
+    
+    Args:
+        N (int): _description_
+        tokenizer (AutoTokenizer): _description_
+        min_n_toks (int, optional): _description_. Defaults to None.
+        max_n_toks (int, optional): _description_. Defaults to None.
+        split (str, optional): _description_. Defaults to 'train'.
 
+    Raises:
+        Exception: _description_
+
+    Returns:
+        _type_: _description_
+    """
     if split == 'train': 
         pile = load_dataset('monology/pile-uncopyrighted', split='train', streaming=True)
     elif split == 'validation':
@@ -32,18 +50,27 @@ def gen_pile_data(N : int, tokenizer : AutoTokenizer, min_n_toks : int = None, s
 
     counter = 0
     for i, example in enumerate(pile):
-        if min_n_toks is not None:
-            toks = tokenizer(example['text'])['input_ids']
-            if len(toks) > min_n_toks:
-                sentences.append(example['text'])
-                counter +=1
-        else:
-            sentences.append(example['text'])
-            counter +=1
-        
         if counter == N:
             break
-
+        
+        toks = tokenizer(example['text'])['input_ids']
+        
+        if min_n_toks is not None:
+            if len(toks) < min_n_toks:
+                continue
+            else:
+                text = example['text']
+            
+        if max_n_toks is not None:
+            if len(toks) > max_n_toks:
+                toks = toks[:max_n_toks]     
+                text = tokenizer.decode(toks)
+            else:
+               text = example['text']
+            
+        sentences.append(text)
+        counter +=1
+        
     return sentences
 
 def tpr_at_fpr(probs, labels, target_fpr, left=0.5, right=1.0, max_steps=1000, thresh_tol=1e-6): 
@@ -128,7 +155,7 @@ def compare_token_lists(genned_toks, ground_toks):
         
         return percent_same_tokens
 
-def tok_by_tok_similarity(outputs, targets, tokenizer = None):
+def tok_by_tok_similarity(outputs : Union[List[str], List[List[int]]], targets : Union[List[str], List[List[int]]], tokenizer = None):
     if isinstance(outputs[0], str):
         assert tokenizer is not None
         if tokenizer.padding_side == "left":
@@ -157,15 +184,29 @@ def extract_quote_completion(s):
     return s.strip().lower()
 
 
-def eval_completions(outputs, targets, sim_types = ['char', 'tok', 'lev', 'sem'], tokenizer = None, return_mean = True):
+def eval_completions(outputs : Union[List[str], List[List[int]]], 
+                     targets : Union[List[str], List[List[int]]], 
+                     sim_types = ['char', 'tok', 'lev', 'sem'], tokenizer = None, return_mean = False):
+    """Pass in tokenizer for tok_by_tok_similarity if outputs and targets are strings
+
+    Args:
+        outputs (_type_): _description_
+        targets (_type_): _description_
+        sim_types (list, optional): _description_. Defaults to ['char', 'tok', 'lev', 'sem'].
+        tokenizer (_type_, optional): _description_. Defaults to None.
+        return_mean (bool, optional): _description_. Defaults to True.
+
+    Returns:
+        _type_: _description_
+    """
     return_dict = {}
     if 'char' in sim_types:
         cbc_sims = char_by_char_similarity(outputs, targets)
-        return_dict['char_by_char_similarity'] = cbc_sims
+        return_dict['char_by_char_sim'] = cbc_sims
     
     if 'tok' in sim_types:
         tbt_sims = tok_by_tok_similarity(outputs, targets, tokenizer = tokenizer)
-        return_dict['tok_by_tok_similarity'] = tbt_sims
+        return_dict['tok_by_tok_sim'] = tbt_sims
     
     if 'lev' in sim_types:
         lev_diss = levenshtein_distance(outputs, targets)
@@ -173,12 +214,13 @@ def eval_completions(outputs, targets, sim_types = ['char', 'tok', 'lev', 'sem']
     
     if 'sem' in sim_types:
         sem_sims = sim_scores(outputs, targets)
-        return_dict['sem_similarity'] = sem_sims
+        return_dict['sem_sim'] = sem_sims
     
     if return_mean:
         return {k: np.mean(v) for k, v in return_dict.items()}
    
     return return_dict
+
 
 def dataset_wide_deduplicate(dataset, col): 
     """
