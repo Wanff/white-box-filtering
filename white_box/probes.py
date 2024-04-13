@@ -4,7 +4,7 @@ from sklearn.metrics import roc_auc_score
 from tqdm import tqdm
 
 class Probe:
-    def __init__(self, d_m):
+    def __init__(self, d_m : int):
         self.d_m = d_m
 
     def forward(self, x):
