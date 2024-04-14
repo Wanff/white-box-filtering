@@ -244,7 +244,6 @@ def run(
 
         # (1, num_optim_tokens, vocab_size) @ (vocab_size, embed_dim) -> (1, num_optim_tokens, embed_dim)
         optim_embeds = optim_ids_onehot @ embedding_layer.weight
-
         
         input_embeds = torch.cat([optim_embeds, after_embeds, target_embeds], dim=1)
         output = model(inputs_embeds=input_embeds, past_key_values=kv_cache, output_hidden_states = True if monitor is not None else False)
@@ -259,12 +258,14 @@ def run(
             monitor_input = slice_acts(output, 
                         N_TOKS = 1, 
                         layers = monitor.layer,
-                        tok_idxs = -1,
+                        tok_idxs = [-1, -2, -3, -4, -5],
                         return_prompt_acts = False)
         elif isinstance(monitor, TextMonitor):
             monitor_input =  tokenizer.batch_decode(before_ids ) + tokenizer.batch_decode(optim_ids) + tokenizer.batch_decode(after_ids) #! fix
         
         monitor_loss = monitor.get_loss(monitor_input)
+        print(monitor_loss.shape)
+        print(torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)).shape)
         
         loss = torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)) + monitor_loss
         optim_ids_onehot_grad = torch.autograd.grad(outputs=[loss], inputs=[optim_ids_onehot])[0]

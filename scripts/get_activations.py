@@ -23,9 +23,157 @@ sys.path.append('../')  # Add the parent directory to the path
 
 from white_box.utils import char_by_char_similarity, tok_by_tok_similarity, levenshtein_distance, ceildiv, gen_pile_data
 from white_box.model_wrapper import ModelWrapper
+from white_box.chat_model_utils import load_model_and_tokenizer, get_template, MODEL_CONFIGS
 
-def toks_to_string(tokenizer, toks):
-    return "".join(tokenizer.batch_decode(toks))
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model_name", type=str, required=True,
+                        help="The name of the model")
+    parser.add_argument("--dataset_name_or_path", type=str, required=True,
+                        help="path to dataset or dataset name")
+    parser.add_argument("--save_path", type=str,
+                        help="The path for saving activations")
+    parser.add_argument("--file_spec", type =str, 
+                        help="string appended to saved acts")
+
+    # Activation saving arguments
+    parser.add_argument("--act_types", nargs="+", default = ['resid'],
+                        help="The types of activations to save: ['resid', 'mlp', 'attn']")
+    parser.add_argument("--layers", nargs="+", default = None)
+    parser.add_argument("--tok_idxs", nargs="+", default = None)
+    
+    parser.add_argument("--max_new_tokens", type=int, default=0,
+                        help = "number of tokens to generate in memorization context. If 0, no autoregressive generation is done")
+    #Memorization arguments
+    parser.add_argument("--mem", action="store_true",
+                        help = "whether to trigger memorization logic")
+    parser.add_argument("--max_prompts", type=int, default = None,
+                        help = "max number of prompts to use when passing in a dataset")
+    parser.add_argument("--save_every", type=int, default=100,
+                        help = "batch size when not using find_executable_batch_size")
+    parser.add_argument("--return_prompt_acts", action="store_true",
+                        help = "return acts in prompt ")
+    parser.add_argument("--logging",  action="store_true")
+    parser.add_argument('--seed', type=int, default=0)
+
+    args = parser.parse_args()
+    return args
+
+
+def main():
+    args = parse_args()
+    
+    print(args)
+ 
+    # set seed
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+    
+    if args.model_name in MODEL_CONFIGS: # for chat_models
+        model_config = MODEL_CONFIGS[args.model_name]
+        model, tokenizer = load_model_and_tokenizer(**model_config)
+        template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))
+        mw = ModelWrapper(model, tokenizer, template = template)
+    else:
+        model = AutoModelForCausalLM.from_pretrained(args.model_name, torch_dtype=torch.float16, device_map="auto").eval()
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name, padding_side="left")
+        tokenizer.pad_token = tokenizer.eos_token
+        mw = ModelWrapper(model, tokenizer)
+    
+    if 'pythia-evals' in args.dataset_name_or_path: 
+        if "deduped" in args.model_name:
+            #model_name looks like: EleutherAI/pythia-12B-deduped
+            dataset_name = "deduped." + args.model_name.split("-")[-2]
+        else:
+            #model_name looks like: EleutherAI/pythia-12B
+            dataset_name = "duped." + args.model_name.split("-")[-1]
+        
+        mem_data = load_dataset('EleutherAI/pythia-memorized-evals')[dataset_name]
+
+        toks = [seq for seq in mem_data[:args.N_PROMPTS]['tokens']]
+        
+        #? this seems silly
+        for i in range(len(toks)): 
+            left = 64 - len(toks[i])
+            assert left == 0, "Need to pad left"
+        
+        toks = torch.tensor(toks)
+        prompts = ["".join(tokenizer.batch_decode(toks))for seq in toks]
+    elif args.dataset_name_or_path == 'pile': 
+        prompts = gen_pile_data(args.N_PROMPTS, tokenizer, min_n_toks = 64)
+        toks = tokenizer(prompts, return_tensors = 'pt', padding = True, max_length = 64, truncation = True)['input_ids']
+    elif args.dataset_name_or_path == 'pile-test': 
+        prompts = gen_pile_data(args.N_PROMPTS, tokenizer, min_n_toks = 64, split='validation')
+        toks = tokenizer(prompts, return_tensors = 'pt', padding = True, max_length = 64, truncation = True)['input_ids']
+    else:
+        if args.dataset_name_or_path.endswith(".csv"):
+            prompts = pd.read_csv(args.dataset_name_or_path).prompt.tolist()
+        else:
+            #! not fleshed out
+            dataset = load_dataset("csv", data_files=args.dataset_name_or_path)
+            prompts = dataset['train']['prompt']
+    
+    tok_idxs = [int(i) for i in args.tok_idxs]
+    print(tok_idxs)
+    if args.mem:
+        # tok_idxs =  (7 * np.arange(10)).tolist() #every 5th token #! when doing pythia, tok_idxs should look like this
+        # tok_idxs[-1]= tok_idxs[-1] - 1 #goes from 63 to 62
+
+        if args.max_new_tokens > 0:
+            hidden_states, generations, gen_tokens, mem_status = get_memmed_activations(mw,
+                                                                                    toks, 
+                                                                                    args.save_path,
+                                                                                    save_every = args.save_every,
+                                                                                    N_TOKS = args.max_new_tokens,
+                                                                                    layers = args.layers,
+                                                                                    tok_idxs = tok_idxs,
+                                                                                    return_prompt_acts = args.return_prompt_acts,
+                                                                                    logging = args.logging,
+                                                                                file_spec = args.file_spec)
+        else:
+            acts_dict = get_memmed_activations_from_pregenned(mw,
+                                                            gen_tokens,
+                                                            args.save_path,
+                                                            act_types = args.act_types,
+                                                            save_every = args.save_every,
+                                                            layers = args.layers,
+                                                            tok_idxs = tok_idxs,
+                                                            logging = args.logging,
+                                                            file_spec = args.file_spec + "attn_mlp_")
+    else:
+        if args.max_new_tokens > 0:
+            hidden_states, generations, gen_tokens = get_activations_autoreg_generic(mw,
+                                                                                    toks, 
+                                                                                    args.save_path,
+                                                                                    save_every = args.save_every,
+                                                                                    max_new_tokens = args.max_new_tokens,
+                                                                                    layers = args.layers,
+                                                                                    return_prompt_acts = args.return_prompt_acts,
+                                                                                    logging = args.logging,
+                                                                                    tok_idxs = tok_idxs,
+                                                                                    file_spec = args.file_spec)
+        else:
+            if not os.path.exists(args.save_path):
+                os.makedirs(args.save_path)
+            
+            if args.layers is None:
+                layers = list(range(mw.model.config.num_hidden_layers))
+
+            acts_dict = mw.batch_hiddens(prompts,
+                                            layers = layers,
+                                            tok_idxs = tok_idxs,
+                                            return_types = args.act_types,
+                                            logging = args.logging
+                                        )
+            #! this should not be a dict
+            torch.save(acts_dict, args.save_path + f"/{args.file_spec}acts_dict.pt")
+            
+    gc.collect()
+    torch.cuda.empty_cache()
+    print("Done")
+    
+
+
 
 def get_memmed_activations_from_pregenned(mw: ModelWrapper, prompts: Union[List[str],List[int]],
                                           save_path: str,
@@ -251,7 +399,7 @@ def get_activations_autoreg_generic(mw: ModelWrapper, prompts: Union[List[str], 
         _type_: _description_
     """
     if not os.path.exists(save_path):
-        os.makedirs(args.save_path)
+        os.makedirs(save_path)
 
     if layers is None:
         layers = range(1, mw.model.config.num_hidden_layers + 1)
@@ -319,161 +467,4 @@ def get_activations_autoreg_generic(mw: ModelWrapper, prompts: Union[List[str], 
     return all_hidden_states, all_generations, all_tokens
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--model_name",
-        type=str,
-        required=True,
-    )
-    parser.add_argument(
-        "--dataset",
-        help="path to dataset or dataset name",
-        type=str,
-        required=True,
-    )
-    parser.add_argument(
-        "--save_path",
-        type=str,
-        required=True,
-    )
-    parser.add_argument(
-        "--act_types",
-        nargs="+",
-        default = None,
-    )
-    parser.add_argument(
-        "--N_PROMPTS",
-        type=int,
-        required=True,
-    )
-    parser.add_argument(
-        "--save_every",
-        type=int,
-        default=100,
-    )
-    parser.add_argument(
-        "--N_TOKS",
-        type=int,
-        default=32,
-    )
-    parser.add_argument(
-        "--layers",
-        nargs="+",
-        default=None,
-    )
-    parser.add_argument(
-        "--return_prompt_acts",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--logging",
-        action="store_true",
-    )
-    parser.add_argument(
-        '--seed', 
-        type=int,
-        default=0,
-    )
-    parser.add_argument(
-        "--mem",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--tok_idxs",
-        nargs="+",
-        default=None,
-    )
-
-
-    args = parser.parse_args()
-    
-    print(args)
-
-    # set seed
-    torch.manual_seed(args.seed)
-    np.random.seed(args.seed)
-    
-    model = AutoModelForCausalLM.from_pretrained(args.model_name, torch_dtype=torch.float16, device_map="auto").eval()
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name, padding_side="left")
-    tokenizer.pad_token = tokenizer.eos_token
-    
-    mw = ModelWrapper(model, tokenizer)
-    
-    if 'pythia-evals' in args.dataset: 
-        if "deduped" in args.model_name:
-            #model_name looks like: EleutherAI/pythia-12B-deduped
-            dataset_name = "deduped." + args.model_name.split("-")[-2]
-        else:
-            #model_name looks like: EleutherAI/pythia-12B
-            dataset_name = "duped." + args.model_name.split("-")[-1]
-        
-        mem_data = load_dataset('EleutherAI/pythia-memorized-evals')[dataset_name]
-
-        toks = [seq for seq in mem_data[:args.N_PROMPTS]['tokens']]
-        
-        #? this seems silly
-        for i in range(len(toks)): 
-            left = 64 - len(toks[i])
-            assert left == 0, "Need to pad left"
-            toks[i] = [tokenizer.pad_token_id] * left + toks[i] # pad left as suggested above
-        
-        toks = torch.tensor(toks)
-        prompts = [toks_to_string(tokenizer, seq) for seq in toks]
-        file_spec = 'mem_'
-    elif args.dataset == 'pile': 
-        prompts = gen_pile_data(args.N_PROMPTS, tokenizer, min_n_toks = 64)
-        toks = tokenizer(prompts, return_tensors = 'pt', padding = True, max_length = 64, truncation = True)['input_ids']
-        file_spec = 'pile_'        
-    elif args.dataset == 'pile-test': 
-        prompts = gen_pile_data(args.N_PROMPTS, tokenizer, min_n_toks = 64, split='validation')
-        toks = tokenizer(prompts, return_tensors = 'pt', padding = True, max_length = 64, truncation = True)['input_ids']
-        file_spec = 'pile_test_'
-    else:
-        dataset = pickle.load(open(args.dataset, 'rb'))
-        prompts = dataset[:args.N_PROMPTS]
-        if isinstance(prompts[0], str):
-            toks = tokenizer(prompts, return_tensors='pt', padding=True, max_length=64, truncation=True)['input_ids']
-        else:
-            toks = torch.tensor(prompts)
-        file_spec = (args.dataset.split("/")[-1]).split(".")[0] + "_"
-        
-    if args.mem:
-        tok_idxs =  (7 * np.arange(10)).tolist() #every 5th token
-        tok_idxs[-1]= tok_idxs[-1] - 1 #goes from 63 to 62
-        print(tok_idxs)
-
-        hidden_states, generations, gen_tokens, mem_status = get_memmed_activations(mw,
-                                                                                toks, 
-                                                                                args.save_path,
-                                                                                save_every = args.save_every,
-                                                                                N_TOKS = args.N_TOKS,
-                                                                                layers = args.layers,
-                                                                                tok_idxs = tok_idxs,
-                                                                                return_prompt_acts = args.return_prompt_acts,
-                                                                                logging = args.logging,
-                                                                                file_spec = file_spec)
-        
-        if args.act_types: 
-            acts_dict = get_memmed_activations_from_pregenned(mw,
-                                                            gen_tokens,
-                                                            args.save_path,
-                                                            act_types = args.act_types,
-                                                            save_every = args.save_every,
-                                                            layers = args.layers,
-                                                            tok_idxs = tok_idxs,
-                                                            logging = args.logging,
-                                                            file_spec = file_spec + "attn_mlp_")
-    else:
-        
-        hidden_states, generations, gen_tokens = get_activations_autoreg_generic(mw,
-                                                                                toks, 
-                                                                                args.save_path,
-                                                                                save_every = args.save_every,
-                                                                                max_new_tokens = args.N_TOKS,
-                                                                                layers = args.layers,
-                                                                                return_prompt_acts = args.return_prompt_acts,
-                                                                                logging = args.logging,
-                                                                                tok_idxs = args.tok_idxs,
-                                                                                file_spec = file_spec)
-
-    print("Done")
+    main()

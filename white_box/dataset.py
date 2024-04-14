@@ -142,7 +142,7 @@ def create_prompt_dist_from_metadata_path(path_to_metadata : str,
                                      col_name : str = 'tok_by_tok_sim',
                                      ) -> PromptDist:
     metadata = pd.read_csv(path_to_metadata)
-    path_to_states = path_to_metadata.replace('metadata.csv', 'all_hidden_states.pt')
+    path_to_states = path_to_metadata.replace('metadata.csv', 'hidden_states.pt')
     idxs = metadata[condition(metadata[col_name])].index.tolist()
     
     return PromptDist(idxs = idxs, path_to_states = path_to_states, path_to_metadata = path_to_metadata)

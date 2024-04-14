@@ -5,6 +5,8 @@ import pickle
 from tqdm import tqdm
 import argparse
 import gc
+import sys
+sys.path.append('../') 
 
 from typing import List, Optional, Tuple, Dict, Union, Callable
 from collections import defaultdict
@@ -21,13 +23,14 @@ def parse_args():
     parser.add_argument("--model_name", type=str,
                         help="The name of the model")
     parser.add_argument("--dataset_path", type=str,
-        help="path to HF dataset or a csv file with prompts",
-    )
+        help="path to HF dataset or a csv file with prompts")
     parser.add_argument("--save_path", type=str,
                         help="The path for saving activations")
+    parser.add_argument("--file_spec", type =str, 
+                        help="string appended to saved acts")
     
     # Activation saving arguments
-    parser.add_argument("--act_types", nargs="+", default = None,
+    parser.add_argument("--act_types", nargs="+", default = ['resid'],
                         help="The types of activations to save: ['resid', 'mlp', 'attn']")
     parser.add_argument("--layers", nargs="+", default = None)
     parser.add_argument("--tok_idxs", nargs="+", default=None)
@@ -56,14 +59,15 @@ def main():
     if args.tok_mult is not None:
         tok_idxs = list(range(0, len(prompts), args.tok_mult))
     else:
-        tok_idxs = None
+        tok_idxs = [int(i) for i in args.tok_idxs]
         
+    print(tok_idxs)
     acts = get_activations(mw, prompts, args.save_path,
                             act_types = args.act_types,
                             layers = args.layers,
                             tok_idxs = tok_idxs,
                             logging = True,
-                            file_spec = f"{args.model_name}_",
+                            file_spec = f"{args.file_spec}_",
                             )
     
     
@@ -98,3 +102,6 @@ def get_activations(mw: ModelWrapper, prompts: Union[List[str],List[int]],
     gc.collect()
     torch.cuda.empty_cache()
     return acts_dict
+
+if __name__=="__main__":
+    main()

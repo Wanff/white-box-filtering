@@ -28,8 +28,8 @@ class ActMonitor(Monitor):
         self.probe = None
         self.layer = layer
 
-    def train(self, acts, labels, lr=0.001, weight_decay=0.1, epochs=1000, device='cpu'):
-        self.probe = train_probe(acts, labels, lr, weight_decay, epochs, device)
-
     def predict(self, acts):
-        return self.probe.predict(acts)
+        return self.probe.predict_proba(acts)
+
+    def get_loss(self, acts):
+        return self.predict(acts)
