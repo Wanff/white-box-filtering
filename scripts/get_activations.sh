@@ -18,10 +18,23 @@
 #     --logging \
 #     --mem  &> ../data/pythia-70m/mem/pythia_evals.out &
 
-python3 get_activations.py \
+# python get_activations.py \
+#     --model_name "llama2_7b" \
+#     --dataset_name_or_path "../data/llama2_7b/jb_metadata.csv" \
+#     --save_path "../data/llama2_7b/" \
+#     --tok_idxs -1 -2 -3 -4 -5  \
+#     --file_spec "jb_" &> ../data/llama2_7b/jb.out &
+    
+# python get_activations.py \
+#     --model_name "llama2_7b" \
+#     --dataset_name_or_path "../data/llama2_7b/jb_unif_behav_metadata.csv" \
+#     --save_path "../data/llama2_7b/" \
+#     --tok_idxs -1 -2 -3 -4 -5  \
+#     --file_spec "jb_unif_behav_" &> ../data/llama2_7b/jb_unif_behav.out &
+
+python get_activations.py \
     --model_name "llama2_7b" \
-    --dataset_name_or_path "../data/llama2_7b/jb_metadata.csv" \
+    --dataset_name_or_path "../data/llama2_7b/jb_gcg_metadata.csv" \
     --save_path "../data/llama2_7b/" \
     --tok_idxs -1 -2 -3 -4 -5  \
-    --file_spec "jb_" &> ../data/llama2_7b/jb.out &
-    
+    --file_spec "jb_gcg_" &> ../data/llama2_7b/jb_gcg.out &

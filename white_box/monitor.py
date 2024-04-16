@@ -1,4 +1,5 @@
-from probes import Probe, LRProbe, MLP, MMProbe
+from white_box.probes import Probe, LRProbe, MLP, MMProbe
+from typing import List 
 
 class Monitor:
     def train(self, data):
@@ -23,10 +24,11 @@ class TextMonitor(Monitor):
     def get_loss(self, data):
         return self.model.get_loss(data)
     
-class ActMonitor(Monitor):
-    def __init__(self, probe, layer):
-        self.probe = None
+class ActMonitor():
+    def __init__(self, probe : Probe, layer : int, tok_idxs : List[int]):
+        self.probe = probe
         self.layer = layer
+        self.tok_idxs = tok_idxs
 
     def predict(self, acts):
         return self.probe.predict_proba(acts)

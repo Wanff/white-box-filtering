@@ -1,4 +1,3 @@
-import transformers
 import time
 import torch
 import torch.nn.functional as F
@@ -107,7 +106,11 @@ def main():
         toks = tokenizer(prompts, return_tensors = 'pt', padding = True, max_length = 64, truncation = True)['input_ids']
     else:
         if args.dataset_name_or_path.endswith(".csv"):
-            prompts = pd.read_csv(args.dataset_name_or_path).prompt.tolist()
+            if "jb" in args.dataset_name_or_path:
+                sep = "t"
+            else:
+                sep = ","
+            prompts = pd.read_csv(args.dataset_name_or_path, sep = sep).prompt.tolist()
         else:
             #! not fleshed out
             dataset = load_dataset("csv", data_files=args.dataset_name_or_path)
@@ -166,7 +169,11 @@ def main():
                                             logging = args.logging
                                         )
             #! this should not be a dict
-            torch.save(acts_dict, args.save_path + f"/{args.file_spec}acts_dict.pt")
+            for act_type in args.act_types:
+                if act_type == 'resid':
+                    torch.save(acts_dict[act_type], args.save_path + f"/{args.file_spec}hidden_states.pt")
+                else:
+                    torch.save(acts_dict[act_type], args.save_path + f"/{args.file_spec}{act_type}.pt")
             
     gc.collect()
     torch.cuda.empty_cache()
