@@ -134,6 +134,10 @@ class LRProbe(t.nn.Module, Probe):
     def predict_proba(self, x, iid=None):
         if x.device != "cuda":
             x = x.to("cuda")
+        
+        if x.dtype != t.float32:
+            x = x.float()
+            
         return self(x)
     
     def from_data(acts, labels, lr=0.001, weight_decay=0.1, epochs=1000, use_bias=False, device='cpu'):

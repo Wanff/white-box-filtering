@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import gc
 from tqdm import tqdm
 from typing import List, Union
+import heapq
 
 import torch
 import transformers
@@ -9,7 +10,7 @@ from torch import Tensor
 
 from accelerate.utils import find_executable_batch_size
 
-from white_box.model_wrapper import slice_acts
+from white_box.model_wrapper import slice_acts, ModelWrapper
 from white_box.monitor import Monitor, ActMonitor, TextMonitor
 
 @dataclass
@@ -22,13 +23,22 @@ class GCGConfig:
     buffer_size: int = 1
     add_space_before_target: bool = True
     device: str = "cuda"
+    gcg_loss_weight : float = 1.0
 
 class AttackBuffer:
     def __init__(self, size: int):
         self.buffer = [] # elements are (loss: float, optim_ids: Tensor)
         self.size = size
+        self.n_repeat = 0 #number of times the same best_ids is returned 
+        self.prev_best_ids = None
 
     def get_best_ids(self) -> Tensor:
+        if self.prev_best_ids is not None and torch.equal(self.prev_best_ids, self.buffer[0][1]):
+            self.n_repeat += 1
+        else:
+            self.n_repeat = 0
+            self.prev_best_ids = self.buffer[0][1]
+            
         return self.buffer[0][1]
 
     def get_lowest_loss(self) -> float:
@@ -39,12 +49,21 @@ class AttackBuffer:
 
     def add(self, loss: float, optim_ids: Tensor) -> None:
         if len(self.buffer) < self.size:
-            self.buffer.append((float('inf'), optim_ids))
+            self.buffer.append((loss, optim_ids))
             return
 
         self.buffer[-1] = (loss, optim_ids)
         self.buffer.sort(key=lambda x: x[0])
+    
+    def sample(self) -> Tensor:
+        idx = torch.randint(high = self.size, size = (1,)).item()
+        return self.buffer[idx][1]
 
+
+def clear_gpus():
+    torch.cuda.empty_cache()
+    gc.collect()
+    
 def sample_ids_from_grad(
     ids: Tensor, 
     grad: Tensor, 
@@ -117,6 +136,8 @@ def compute_candidates_loss(
     input_embeds: Tensor, 
     target_ids: Tensor,
     monitor : Union[ActMonitor, TextMonitor] = None,
+    input_ids: Tensor = None,
+    config : GCGConfig = None,
 ):
     """Computes the GCG loss on all candidate token id sequences.
 
@@ -144,7 +165,7 @@ def compute_candidates_loss(
                 for j in range(len(kv_cache[i])):
                     kv_cache_batch[i].append(kv_cache[i][j].expand(current_batch_size, -1, -1, -1))
 
-            outputs = model(inputs_embeds=input_embeds_batch, past_key_values=kv_cache_batch)
+            outputs = model(inputs_embeds=input_embeds_batch, past_key_values=kv_cache_batch, output_hidden_states = True if monitor is not None else False)
             logits = outputs.logits
 
             tmp = input_embeds.shape[1] - target_ids.shape[1]
@@ -153,28 +174,37 @@ def compute_candidates_loss(
 
             if isinstance(monitor, ActMonitor):
                 monitor_input = slice_acts(outputs, 
-                        N_TOKS = 1, 
+                        N_TOKS = 0, 
                         layers = monitor.layer,
-                        tok_idxs = -1,
+                        tok_idxs = monitor.tok_idxs,
                         return_prompt_acts = False)
             elif isinstance(monitor, TextMonitor):
-                monitor_input =  tokenizer.batch_decode(before_ids ) + tokenizer.batch_decode(optim_ids) + tokenizer.batch_decode(after_ids) #! fix
+                assert input_ids is not None, "TextMonitor requires input_ids"
+                monitor_input = input_ids #* assumes that textmonitor tokenizer is the same
         
-            monitor_loss = monitor.get_loss(monitor_input)
-        
-            loss = torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1), reduction="none") + monitor_loss
+            monitor_loss = monitor.get_loss(monitor_input).mean()
+            del monitor_input
+            clear_gpus()
+            
+            loss = config.gcg_loss_weight * torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1), reduction="none") + monitor_loss
             loss = loss.view(current_batch_size, -1).mean(dim=-1)
             all_loss.append(loss)
 
             del outputs
-            torch.cuda.empty_cache()
-            gc.collect()
+            clear_gpus()
 
     return torch.cat(all_loss, dim=0)
 
+def gen_init_buffer_ids(mw : ModelWrapper, num_toks: int, num_seqs: int):
+    if num_seqs == 0:
+        return []
+    punc_tok_ids = torch.tensor(mw.tokenizer([".", ",", "!", "?", ";", ":", "(", ")", "[", "]", "{", "}"])['input_ids']).to(mw.model.device, dtype = torch.float32)[:, 1]
+    init_buffer_ids = [punc_tok_ids[torch.multinomial(punc_tok_ids, num_toks, replacement = True)].unsqueeze(0).long() for _ in range(num_seqs)]
+    
+    return init_buffer_ids
+    
 def run(
-    model: transformers.PreTrainedModel,
-    tokenizer: transformers.PreTrainedTokenizer,
+    mw : ModelWrapper,
     messages: Union[str, List[dict]],
     target: str,
     monitor : Union[ActMonitor, TextMonitor] = None,
@@ -183,8 +213,7 @@ def run(
     """Generates a single optimized string using GCG. 
 
     Args:
-        model: The model to optimize on.
-        tokenizer: The model's tokenizer.
+        mw: ModelWrapper
         messages: The conversation to use for optimization.
         target: The target generation.
         config: The GCG configuration to use.
@@ -193,6 +222,20 @@ def run(
     Returns:
         A dict that stores losses and the final optim_str
     """
+    def n_replace_sched(step: int) -> int:
+        n_replace = int((1 - step / config.num_steps) * config.n_replace)
+        if n_replace < 1:
+            return 1
+        return n_replace
+    def search_width_sched(n_repeat : int) -> int:
+        """as n_repeat goes from 1 to 10, search_width goes from search_width to 4 * search_width"""
+        if n_repeat > 10:
+            mult = 8
+        else:
+            mult = n_repeat // 2 + 1
+        return config.search_width * mult
+        
+        
     if config == None:
         config = GCGConfig()
     
@@ -202,83 +245,110 @@ def run(
     if not any(["{optim_str}" in d["content"] for d in messages]):
         messages[-1]["content"] = messages[-1]["content"] + " {optim_str}"
 
-    model.to(config.device)
-
-    template = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True) 
+    template = mw.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True) 
     # Remove the BOS token -- this will get added when tokenizing, if necessary
-    if tokenizer.bos_token and template.startswith(tokenizer.bos_token):
-        template = template.replace(tokenizer.bos_token, "")
+    if mw.tokenizer.bos_token and template.startswith(mw.tokenizer.bos_token):
+        template = template.replace(mw.tokenizer.bos_token, "")
     before_str, after_str = template.split("{optim_str}")
 
     target = " " + target if config.add_space_before_target else target
 
     # Tokenize everything that doesn't get optimized
-    before_ids = tokenizer([before_str], padding=False)["input_ids"]
-    after_ids = tokenizer([after_str], add_special_tokens=False)["input_ids"]
-    target_ids = tokenizer([target], add_special_tokens=False)["input_ids"]
+    before_ids = mw.tokenizer([before_str], padding=False)["input_ids"]
+    after_ids = mw.tokenizer([after_str], add_special_tokens=False)["input_ids"]
+    target_ids = mw.tokenizer([target], add_special_tokens=False)["input_ids"]
 
-    before_ids, after_ids, target_ids = [torch.tensor(ids, device=config.device) for ids in (before_ids, after_ids, target_ids)]
+    before_ids, after_ids, target_ids = [torch.tensor(ids, device=mw.model.device) for ids in (before_ids, after_ids, target_ids)]
 
     # Embed everything that doesn't get optimized
-    embedding_layer = model.get_input_embeddings()
+    embedding_layer = mw.model.get_input_embeddings()
     before_embeds, after_embeds, target_embeds = [embedding_layer(ids) for ids in (before_ids, after_ids, target_ids)]
 
     # Compute the KV Cache for tokens that appear before the optimized tokens
     with torch.no_grad():
-        output = model(inputs_embeds=before_embeds, use_cache=True)
+        output = mw.model(inputs_embeds=before_embeds, use_cache=True)
         kv_cache = output.past_key_values
     
-    optim_ids = tokenizer(config.optim_str_init, return_tensors="pt", add_special_tokens=False)["input_ids"].to(config.device)
+    optim_ids = mw.tokenizer(config.optim_str_init, return_tensors="pt", add_special_tokens=False)["input_ids"].to(mw.model.device)
+    
     buffer = AttackBuffer(config.buffer_size)
-    buffer.add(loss=float('inf'), optim_ids=optim_ids)
-    for _ in range(config.buffer_size - 1):
-        buffer.add(loss=float('inf'), optim_ids=torch.randint_like(optim_ids, 0, tokenizer.vocab_size, dtype=torch.long, device=config.device))
+    buffer_ids = torch.stack([optim_ids] + gen_init_buffer_ids(mw, optim_ids.shape[1], config.buffer_size - 1)).squeeze(1)
+    input_embeds = torch.cat([
+            embedding_layer(buffer_ids),
+            after_embeds.repeat(buffer_ids.shape[0], 1, 1),
+            target_embeds.repeat(buffer_ids.shape[0], 1, 1)
+        ], dim=1)    
+    
+    loss = find_executable_batch_size(compute_candidates_loss, buffer_ids.shape[0])(
+            mw.model,
+            kv_cache,
+            input_embeds,
+            target_ids,
+            monitor, 
+            config = config
+        )
+    for i in range(config.buffer_size):
+        buffer.add(loss=loss[i].item(), optim_ids=buffer_ids[i].unsqueeze(0))
     
     losses = []
     optim_strings = []
     for i in tqdm(range(config.num_steps)):
+        optim_ids = buffer.get_best_ids()
+        
         # Create the one-hot encoding matrix of our optimized token ids
         optim_ids_onehot = torch.nn.functional.one_hot(optim_ids, num_classes=embedding_layer.num_embeddings)
-        optim_ids_onehot = optim_ids_onehot.to(dtype=model.dtype, device=config.device)
+        optim_ids_onehot = optim_ids_onehot.to(dtype=mw.model.dtype, device=mw.model.device)
         optim_ids_onehot.requires_grad_()
 
         # (1, num_optim_tokens, vocab_size) @ (vocab_size, embed_dim) -> (1, num_optim_tokens, embed_dim)
         optim_embeds = optim_ids_onehot @ embedding_layer.weight
-        
         input_embeds = torch.cat([optim_embeds, after_embeds, target_embeds], dim=1)
-        output = model(inputs_embeds=input_embeds, past_key_values=kv_cache, output_hidden_states = True if monitor is not None else False)
+        output = mw.model(inputs_embeds=input_embeds, past_key_values=kv_cache, output_hidden_states = True if monitor is not None else False)
         logits = output.logits
 
         # Shift logits so token n-1 predicts token n
         shift = input_embeds.shape[1] - target_ids.shape[1]
         shift_logits = logits[..., shift-1:-1, :].contiguous() # (1, num_target_ids, vocab_size)
         shift_labels = target_ids
-        
+            
         if isinstance(monitor, ActMonitor):
             monitor_input = slice_acts(output, 
-                        N_TOKS = 1, 
+                        N_TOKS = 0, 
                         layers = monitor.layer,
-                        tok_idxs = [-1, -2, -3, -4, -5],
+                        tok_idxs = monitor.tok_idxs,
                         return_prompt_acts = False)
         elif isinstance(monitor, TextMonitor):
-            monitor_input =  tokenizer.batch_decode(before_ids ) + tokenizer.batch_decode(optim_ids) + tokenizer.batch_decode(after_ids) #! fix
+            monitor_input =  mw.tokenizer.batch_decode(before_ids ) + mw.tokenizer.batch_decode(optim_ids) + mw.tokenizer.batch_decode(after_ids) #! fix
         
-        monitor_loss = monitor.get_loss(monitor_input)
-        print(monitor_loss.shape)
-        print(torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)).shape)
+        monitor_loss = monitor.get_loss(monitor_input).mean() #? not sure if this is the right way to do it 
+        del monitor_input
+        clear_gpus()
         
-        loss = torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)) + monitor_loss
+        if torch.argmax(shift_logits, dim=-1).eq(shift_labels).all() and monitor_loss < 0.5:
+            print("Early Stopping Condition Met")
+            print(mw.tokenizer.decode(torch.argmax(shift_logits, dim=-1)))
+            return {
+                "losses": losses,
+                "optim_strings": optim_strings,
+            }
+            
+        gcg_loss = torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+        
+        print(f"monitor_loss : {monitor_loss} | gcg_loss : {gcg_loss} | search_width : {search_width_sched(buffer.n_repeat)} | n_replace : {n_replace_sched(i)}")
+        
+        loss = config.gcg_loss_weight * gcg_loss + monitor_loss
         optim_ids_onehot_grad = torch.autograd.grad(outputs=[loss], inputs=[optim_ids_onehot])[0]
 
         # Sample candidate token sequences
         sampled_ids = sample_ids_from_grad(
             optim_ids.squeeze(0),
             optim_ids_onehot_grad.squeeze(0),
-            config.search_width,
+            search_width_sched(buffer.n_repeat),
             config.topk,
-            config.n_replace
+            n_replace_sched(i)
         )
-        sampled_ids = filter_ids(sampled_ids, tokenizer)
+        
+        sampled_ids = filter_ids(sampled_ids, mw.tokenizer)
         new_search_width = sampled_ids.shape[0]
 
         input_embeds = torch.cat([
@@ -289,21 +359,31 @@ def run(
 
         # Compute loss on all candidate sequences 
         loss = find_executable_batch_size(compute_candidates_loss, new_search_width)(
-            model,
+            mw.model,
             kv_cache,
             input_embeds,
-            target_ids
+            target_ids,
+            monitor,
+            config = config,
         )
 
         current_loss = loss.min().item()
         losses.append(current_loss)
 
+        # # get the buffer_size best optim_ids, sorted from lowest loss to highest loss
+        # buffer_idxs = loss.argsort()[:config.buffer_size]
+        # # for each optim_ids, add it to buffer if its loss is less than highest loss, if not, then break from the loop
+        # for idx_buffer in buffer_idxs:
+        #     if loss[idx_buffer] < buffer.get_highest_loss():                
+        #         buffer.add(loss[idx_buffer].item(), sampled_ids[idx_buffer].unsqueeze(0))
+        #     else:
+                # break
+        
         optim_ids = sampled_ids[loss.argmin()].unsqueeze(0)
-
         if current_loss < buffer.get_highest_loss():
             buffer.add(current_loss, optim_ids)
 
-        optim_str = tokenizer.batch_decode(buffer.get_best_ids())
+        optim_str = mw.tokenizer.batch_decode(buffer.get_best_ids())        
         optim_strings.append(optim_str)
 
         print(f"step: {i} | optim_str: {optim_str} | loss: {buffer.get_lowest_loss()}")

@@ -268,7 +268,9 @@ def slice_acts(out, N_TOKS: int, return_prompt_acts: bool, layers: List, tok_idx
     #! expects hf layer idxs (ie 1-index)
     #out.hidden_states is shape  max_new_tokens x n_layers + 1 x batch x activations
 
-    if N_TOKS == 1:
+    if N_TOKS == 0:
+        acts = torch.stack(out.hidden_states, dim = 1) #this is when you just call model(), not generate
+    elif N_TOKS == 1:
         acts = torch.stack([torch.cat(out.hidden_states[0], dim = 1)], dim = 1)  #1, N_TOKS bc the first index is all previous tokens
     else:
         #first loop goes through the tokens, second loop goes through the layers or something
@@ -355,8 +357,9 @@ class ModelWrapper(torch.nn.Module):
     def forward(self, *args, **kwargs):
         return self.model(*args, **kwargs)
         
-    def generate(self, **kwargs):
-        return self.model.generate(**kwargs)
+    def generate(self, prompts, **kwargs):
+        input_ids, attention_mask = self.process_prompts(prompts)
+        return self.model.generate(input_ids = input_ids, attention_mask = attention_mask, **kwargs)
 
     def process_prompts(self, prompts : Union[List[str], List[int]]):
         if isinstance(prompts[0], str):
@@ -432,7 +435,7 @@ class ModelWrapper(torch.nn.Module):
                 #     print()
                 
             for act_type in hidden_states_dict:
-                hidden_states_dict[act_type] = torch.stack(hidden_states_dict[act_type]).reshape(len(prompts), len(layers), len(tok_idxs) -1)
+                hidden_states_dict[act_type] = torch.cat(hidden_states_dict[act_type], dim = 1).reshape(len(prompts), len(layers), len(tok_idxs), -1)
             return hidden_states_dict
         return inner_loop()
                                
