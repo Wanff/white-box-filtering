@@ -351,7 +351,12 @@ def gen_prefix_dataset_strings(prompts : List[str], tokenizer : AutoTokenizer, p
     
     return [pile_prefix + prompt  for prompt, pile_prefix in zip(prompts, pile_data)]
 
-# * Probe Dataset stuff
+
+from white_box.probes import LRProbe, MMProbe
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, roc_auc_score
+
 class ProbeDataset():
     def __init__(self, dataset : ActDataset):
         if dataset.X is None:
@@ -397,7 +402,8 @@ class ProbeDataset():
                     weight_decay : float = 1,
                     epochs : int = 500,
                     use_bias : bool = True,
-                    test_size = 0.2):
+                    test_size = 0.2, 
+                    device = 'cuda'): 
         
         X_train, X_val, y_train, y_val = self.act_dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = 0)
         
@@ -406,23 +412,34 @@ class ProbeDataset():
                                 weight_decay = weight_decay, 
                                 epochs = epochs, 
                                 use_bias = use_bias,
-                                device = "cuda")
+                                device = device)
 
-        acc = probe.get_probe_accuracy(X_val, y_val, device = "cuda")
-        auc = probe.get_probe_auc(X_val, y_val, device = "cuda")
+        acc = probe.get_probe_accuracy(X_val, y_val, device = device)
+        auc = probe.get_probe_auc(X_val, y_val, device = device)
         
         return acc, auc, probe
     
-    def convert_sk_probe_to_torch_probe(self, sk_probe):
-        return LRProbe.from_weights(torch.tensor(sk_probe.coef_), torch.tensor(sk_probe.intercept_)).to('cuda')
-
-    def train_sk_probe(self, layer : int, tok_idxs : List[int], 
-                       max_iter : int = 3000,
-                       C : float = 1e-5,
-                       test_size : float = 0.2,
-                       return_torch_probe  : bool = True,
+    def train_mm_probe(self, layer : int, tok_idxs : List[int],
+                            test_size = 0.2, 
+                            device='cuda',
                        ):
-        X_train, X_val, y_train, y_val = self.act_dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = 0, balanced = True)
+        X_train, X_val, y_train, y_val = self.dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = 0)
+        probe = MMProbe.from_data(X_train.to(device), y_train.to(device), device=device)
+
+        # center val data
+        X_val = X_val - X_val.mean(0)
+
+        acc = probe.get_probe_accuracy(X_val, y_val, device = device)
+        auc = probe.get_probe_auc(X_val, y_val, device = device)
+
+        return acc, auc, probe
+    
+    def train_sk_probe(self, layer : int, tok_idxs : List[int], 
+                       max_iter = 3000,
+                       C = 1e-5,
+                       test_size = 0.2
+                        ): 
+        X_train, X_val, y_train, y_val = self.dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = 0)
 
         probe_lr = LogisticRegression(max_iter = max_iter, C = C)
         probe_lr.fit(X_train.numpy(), y_train.numpy())
