@@ -14,6 +14,7 @@ from collections import defaultdict
 import torch
 from datasets import Dataset, load_from_disk, load_dataset
 from accelerate.utils import find_executable_batch_size
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from white_box.chat_model_utils import load_model_and_tokenizer, get_template, MODEL_CONFIGS
 from white_box.model_wrapper import ModelWrapper
@@ -28,6 +29,10 @@ def parse_args():
                         help="The path for saving activations")
     parser.add_argument("--file_spec", type =str, 
                         help="string appended to saved acts")
+    parser.add_argument("--use_fs", action="store_true",
+                        help="Use the fast chat template. Defaults to false with the question/n/nAnswer: format")
+    parser.add_argument('--device', type=str, default='cuda', 
+                        help='Device to run the model on')
     
     # Activation saving arguments
     parser.add_argument("--act_types", nargs="+", default = ['resid'],
@@ -44,13 +49,22 @@ def main():
     print(args)
     
     model_config = MODEL_CONFIGS[args.model_name]
-    model, tokenizer = load_model_and_tokenizer(**model_config)
-    template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))
+    # model, tokenizer = load_model_and_tokenizer(**model_config)
+
+    model = AutoModelForCausalLM.from_pretrained(model_config['model_name_or_path'])
+    tokenizer = AutoTokenizer.from_pretrained(model_config['model_name_or_path'])
+    tokenizer.pad_token = tokenizer.eos_token
+    model.to(args.device)
+
+    if args.use_fs: 
+        template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))['prompt']
+    else: 
+        template = '{instruction}\n\nAnswer:'
     
     mw = ModelWrapper(model, tokenizer, template = template)
 
     if args.dataset_path.endswith(".csv"):
-        prompts = pd.read_csv(args.dataset_path).prompt.tolist()
+        prompts = pd.read_csv(args.dataset_path)['prompt'].tolist()
     else:
         #! not fleshed out
         dataset = load_dataset("csv", data_files=args.dataset_path)
@@ -67,7 +81,7 @@ def main():
                             layers = args.layers,
                             tok_idxs = tok_idxs,
                             logging = True,
-                            file_spec = f"{args.file_spec}_",
+                            file_spec = f"{args.file_spec}",
                             )
     
     
