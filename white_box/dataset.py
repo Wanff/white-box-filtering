@@ -423,7 +423,7 @@ class ProbeDataset():
                             test_size = 0.2, 
                             device='cuda',
                        ):
-        X_train, X_val, y_train, y_val = self.dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = 0)
+        X_train, X_val, y_train, y_val = self.act_dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = 0)
         probe = MMProbe.from_data(X_train.to(device), y_train.to(device), device=device)
 
         # center val data
@@ -437,11 +437,10 @@ class ProbeDataset():
     def train_sk_probe(self, layer : int, tok_idxs : List[int], 
                        max_iter = 3000,
                        C = 1e-5,
-                       test_size = 0.2
-                       return_torch_probe=False,
-    ): 
-        
-        X_train, X_val, y_train, y_val = self.dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = 0)
+                       test_size = 0.2,
+                       return_torch_probe : bool = True
+                        ): 
+        X_train, X_val, y_train, y_val = self.act_dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = 0)
 
         probe_lr = LogisticRegression(max_iter = max_iter, C = C)
         probe_lr.fit(X_train.numpy(), y_train.numpy())
@@ -455,6 +454,8 @@ class ProbeDataset():
         else:
             return accuracy, auc, probe_lr
     
+    def convert_sk_probe_to_torch_probe(self, probe_lr):
+        return LRProbe.from_weights(torch.tensor(probe_lr.coef_), torch.tensor(probe_lr.intercept_))
     def idxs_probe_gets_wrong(self, probe : Probe, 
                               layer : int , 
                               tok_idxs : List[int],
@@ -464,7 +465,6 @@ class ProbeDataset():
         val_idxs = self.act_dataset.test_idxs
         val_labels = self.act_dataset.y[val_idxs]
 
-        # _, probe_states = self.dataset.convert_states(self.dataset.X[val_idxs], val_labels, tok_idxs = tok_idxs, layer = layer)
         probas = probe.predict_proba(self.act_dataset.X[val_idxs][:, layer, tok_idxs]).cpu().detach()
         if pred_method == "mean":
             preds = (probas.mean(dim = 1) > thresh)
