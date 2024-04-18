@@ -24,6 +24,7 @@ class GCGConfig:
     add_space_before_target: bool = True
     device: str = "cuda"
     gcg_loss_weight : float = 1.0
+    use_search_width_sched : bool = False
 
 class AttackBuffer:
     def __init__(self, size: int):
@@ -127,7 +128,10 @@ def filter_ids(ids: Tensor, tokenizer: transformers.PreTrainedTokenizer):
         if torch.equal(ids[i], ids_encoded):
            filtered_ids.append(ids[i]) 
     
-    return torch.stack(filtered_ids)
+    if len(filtered_ids) == 0:
+        return []
+    else:
+        return torch.stack(filtered_ids)
 
 def compute_candidates_loss(
     search_batch_size: int, 
@@ -176,7 +180,7 @@ def compute_candidates_loss(
                 monitor_input = slice_acts(outputs, 
                         N_TOKS = 0, 
                         layers = monitor.layer,
-                        tok_idxs = monitor.tok_idxs,
+                        tok_idxs = torch.tensor(monitor.tok_idxs) - tmp,
                         return_prompt_acts = False)
             elif isinstance(monitor, TextMonitor):
                 assert input_ids is not None, "TextMonitor requires input_ids"
@@ -229,11 +233,15 @@ def run(
         return n_replace
     def search_width_sched(n_repeat : int) -> int:
         """as n_repeat goes from 1 to 10, search_width goes from search_width to 4 * search_width"""
-        if n_repeat > 10:
-            mult = 10
+        if config.use_search_width_sched:
+            if n_repeat > 10:
+                mult = 10
+            else:
+                mult = n_repeat // 2 + 1
+            return config.search_width * mult
         else:
-            mult = n_repeat // 2 + 1
-        return config.search_width * mult
+            return config.search_width
+        
         
     if config == None:
         config = GCGConfig()
@@ -314,7 +322,7 @@ def run(
             monitor_input = slice_acts(output, 
                         N_TOKS = 0, 
                         layers = monitor.layer,
-                        tok_idxs = monitor.tok_idxs,
+                        tok_idxs =torch.tensor(monitor.tok_idxs) - shift,
                         return_prompt_acts = False)
         elif isinstance(monitor, TextMonitor):
             monitor_input =  mw.tokenizer.batch_decode(before_ids ) + mw.tokenizer.batch_decode(optim_ids) + mw.tokenizer.batch_decode(after_ids) #! fix
@@ -349,6 +357,10 @@ def run(
         )
         
         sampled_ids = filter_ids(sampled_ids, mw.tokenizer)
+        if len(sampled_ids) == 0:
+            print("No good sampled ids")
+            continue 
+        
         new_search_width = sampled_ids.shape[0]
 
         input_embeds = torch.cat([
