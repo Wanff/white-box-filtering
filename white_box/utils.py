@@ -230,3 +230,16 @@ def dataset_wide_deduplicate(dataset, col):
     dataset = dataset.to_pandas()
     dataset = dataset.drop_duplicates(subset = col)
     return datasets.Dataset.from_pandas(dataset)
+
+def rotation_cipher(text, shift): 
+    """
+    Rotates the text by shift amount, character-wise. Also 
+    known as the Caesar cipher.
+    """
+    shifted_text = []
+    for char in text: 
+        if char.isalpha():
+            shifted_text.append(chr((ord(char) - ord('a') + shift) % 26 + ord('a')))
+        else:
+            shifted_text.append(char)
+    return ''.join(shifted_text)

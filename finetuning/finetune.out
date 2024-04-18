@@ -1,0 +1,9 @@
+Python 2.7.5
+
+CondaError: Run 'conda init' before 'conda activate'
+
+/var/spool/slurmd/job1339103/slurm_script: line 10: cd: white-box-filtering/finetuning: No such file or directory
+  File "finetune.py", line 108
+    print(f"{epoch} | Train Loss: {train_epoch_loss} | Train PPL: {train_ppl}")
+                                                                             ^
+SyntaxError: invalid syntax
