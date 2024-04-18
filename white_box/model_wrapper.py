@@ -396,7 +396,7 @@ class ModelWrapper(torch.nn.Module):
         if isinstance(layers, int):
             layers = [layers]
             
-        @find_executable_batch_size(starting_batch_size=len(prompts) // 4)
+        @find_executable_batch_size(starting_batch_size=len(prompts) )
         def inner_loop(batch_size):
             nonlocal prompts, layers, tok_idxs, return_types, logging, kwargs
             hidden_states_dict = defaultdict(list)

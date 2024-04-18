@@ -230,11 +230,10 @@ def run(
     def search_width_sched(n_repeat : int) -> int:
         """as n_repeat goes from 1 to 10, search_width goes from search_width to 4 * search_width"""
         if n_repeat > 10:
-            mult = 8
+            mult = 10
         else:
             mult = n_repeat // 2 + 1
         return config.search_width * mult
-        
         
     if config == None:
         config = GCGConfig()
@@ -302,7 +301,7 @@ def run(
 
         # (1, num_optim_tokens, vocab_size) @ (vocab_size, embed_dim) -> (1, num_optim_tokens, embed_dim)
         optim_embeds = optim_ids_onehot @ embedding_layer.weight
-        input_embeds = torch.cat([optim_embeds, after_embeds, target_embeds], dim=1)
+        input_embeds = torch.cat([optim_embeds, after_embeds, target_embeds], dim=1) #*
         output = mw.model(inputs_embeds=input_embeds, past_key_values=kv_cache, output_hidden_states = True if monitor is not None else False)
         logits = output.logits
 
@@ -324,9 +323,10 @@ def run(
         del monitor_input
         clear_gpus()
         
-        if torch.argmax(shift_logits, dim=-1).eq(shift_labels).all() and monitor_loss < 0.5:
+        if torch.argmax(shift_logits, dim=-1).eq(shift_labels).all() and monitor_loss < 0.5: #* the reason this is diff is because im getting loss on the target completion but testing the probe before the target completion
             print("Early Stopping Condition Met")
-            print(mw.tokenizer.decode(torch.argmax(shift_logits, dim=-1)))
+            print(torch.argmax(shift_logits, dim=-1))
+            print(shift_labels)
             return {
                 "losses": losses,
                 "optim_strings": optim_strings,
