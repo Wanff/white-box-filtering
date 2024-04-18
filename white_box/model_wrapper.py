@@ -364,7 +364,7 @@ class ModelWrapper(torch.nn.Module):
     def process_prompts(self, prompts : Union[List[str], List[int]]):
         if isinstance(prompts[0], str):
             if self.template is not None:
-                prompts = [self.template['prompt'].format(instruction=s) for s in prompts]
+                prompts = [self.template.format(instruction=s) for s in prompts]
             inputs = self.tokenizer(prompts, return_tensors="pt", padding=True, max_length=512, truncation=True)
         else:
             inputs = self.tokenizer.pad({'input_ids': prompts}, padding = True, return_attention_mask=True)
