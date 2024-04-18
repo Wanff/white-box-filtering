@@ -67,12 +67,6 @@ def get_mw(args):
     if args.model_name in MODEL_CONFIGS: # for chat_models
         model_config = MODEL_CONFIGS[args.model_name]
         model, tokenizer = load_model_and_tokenizer(**model_config)
-<<<<<<< HEAD
-        template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))['prompt']
-        print(template)
-        mw = ModelWrapper(model, tokenizer, template = template)
-    else:
-=======
     elif args.model_name in LORA_MODELS: 
         assert args.device == 'cuda', "LoRA models only work on cuda"
         config = PeftConfig.from_pretrained(args.model_name)
@@ -85,7 +79,6 @@ def get_mw(args):
         tokenizer = AutoTokenizer.from_pretrained(config.base_model_name_or_path, padding_side="left")
         model_config = LORA_MODELS[args.model_name]
     else: 
->>>>>>> a23c35ae916208d12b8001e60e5dadf1c7b02066
         model = AutoModelForCausalLM.from_pretrained(args.model_name, torch_dtype=torch.float16, device_map="auto").eval()
         tokenizer = AutoTokenizer.from_pretrained(args.model_name, padding_side="left")
         assert args.use_simple, "Only simple chat is supported for non-chat models"
@@ -139,73 +132,7 @@ def get_data(args, tokenizer):
     
     tok_idxs = [int(i) for i in args.tok_idxs]
     print(tok_idxs)
-<<<<<<< HEAD
-    if args.mem:
-        # tok_idxs =  (7 * np.arange(10)).tolist() #every 5th token #! when doing pythia, tok_idxs should look like this
-        # tok_idxs[-1]= tok_idxs[-1] - 1 #goes from 63 to 62
-
-        if args.max_new_tokens > 0:
-            hidden_states, generations, gen_tokens, mem_status = get_memmed_activations(mw,
-                                                                                    toks, 
-                                                                                    args.save_path,
-                                                                                    save_every = args.save_every,
-                                                                                    N_TOKS = args.max_new_tokens,
-                                                                                    layers = args.layers,
-                                                                                    tok_idxs = tok_idxs,
-                                                                                    return_prompt_acts = args.return_prompt_acts,
-                                                                                    logging = args.logging,
-                                                                                file_spec = args.file_spec)
-        else:
-            acts_dict = get_memmed_activations_from_pregenned(mw,
-                                                            gen_tokens,
-                                                            args.save_path,
-                                                            act_types = args.act_types,
-                                                            save_every = args.save_every,
-                                                            layers = args.layers,
-                                                            tok_idxs = tok_idxs,
-                                                            logging = args.logging,
-                                                            file_spec = args.file_spec + "attn_mlp_")
-    else:
-        if args.max_new_tokens > 0:
-            hidden_states, generations, gen_tokens = get_activations_autoreg_generic(mw,
-                                                                                    toks, 
-                                                                                    args.save_path,
-                                                                                    save_every = args.save_every,
-                                                                                    max_new_tokens = args.max_new_tokens,
-                                                                                    layers = args.layers,
-                                                                                    return_prompt_acts = args.return_prompt_acts,
-                                                                                    logging = args.logging,
-                                                                                    tok_idxs = tok_idxs,
-                                                                                    file_spec = args.file_spec)
-        else:
-            if not os.path.exists(args.save_path):
-                os.makedirs(args.save_path)
-            
-            if args.layers is None:
-                layers = list(range(mw.model.config.num_hidden_layers))
-
-            acts_dict = mw.batch_hiddens(prompts,
-                                        layers = layers,
-                                        tok_idxs = tok_idxs,
-                                        return_types = args.act_types,
-                                        logging = args.logging
-                                        )
-
-            for act_type in args.act_types:
-                if act_type == 'resid':
-                    torch.save(acts_dict[act_type], args.save_path + f"/{args.file_spec}hidden_states.pt")
-                else:
-                    torch.save(acts_dict[act_type], args.save_path + f"/{args.file_spec}{act_type}.pt")
-            
-    gc.collect()
-    torch.cuda.empty_cache()
-    print("Done")
-    
-
-
-=======
     return prompts, toks, tok_idxs
->>>>>>> a23c35ae916208d12b8001e60e5dadf1c7b02066
 
 def get_memmed_activations_from_pregenned(mw: ModelWrapper, prompts: Union[List[str],List[int]],
                                           save_path: str,
