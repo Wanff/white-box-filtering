@@ -307,9 +307,8 @@ def load_model_and_tokenizer(
 
     if tokenizer.pad_token is None or tokenizer.pad_token_id is None:
         print("Tokenizer.pad_token is None, setting to tokenizer.unk_token")
-        tokenizer.pad_token = tokenizer.unk_token
+        tokenizer.pad_token = tokenizer.eos_token
         print("tokenizer.pad_token", tokenizer.pad_token)
-    tokenizer.pad_token = tokenizer.eos_token
     
     return model, tokenizer
 
