@@ -83,7 +83,6 @@ def get_mw(args):
         tokenizer = AutoTokenizer.from_pretrained(args.model_name, padding_side="left")
         assert args.use_simple, "Only simple chat is supported for non-chat models"
     
-    tokenizer.pad_token = tokenizer.eos_token
     if args.use_simple: 
         template = '{instruction}\n\nAnswer: '
     else: 
