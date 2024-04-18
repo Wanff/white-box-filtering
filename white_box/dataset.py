@@ -438,7 +438,9 @@ class ProbeDataset():
                        max_iter = 3000,
                        C = 1e-5,
                        test_size = 0.2
-                        ): 
+                       return_torch_probe=False,
+    ): 
+        
         X_train, X_val, y_train, y_val = self.dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = 0)
 
         probe_lr = LogisticRegression(max_iter = max_iter, C = C)

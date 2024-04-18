@@ -77,6 +77,7 @@ def get_mw(args):
             load_in_4bit=True,
         ).model
         tokenizer = AutoTokenizer.from_pretrained(config.base_model_name_or_path, padding_side="left")
+        tokenizer.pad_token = tokenizer.eos_token
         model_config = LORA_MODELS[args.model_name]
     else: 
         model = AutoModelForCausalLM.from_pretrained(args.model_name, torch_dtype=torch.float16, device_map="auto").eval()
