@@ -435,7 +435,7 @@ class ModelWrapper(torch.nn.Module):
                 #     print()
                 
             for act_type in hidden_states_dict:
-                hidden_states_dict[act_type] = torch.cat(hidden_states_dict[act_type], dim = 1).reshape(len(prompts), len(layers), len(tok_idxs), -1)
+                hidden_states_dict[act_type] = torch.cat(hidden_states_dict[act_type]).reshape(len(prompts), len(layers), len(tok_idxs), -1)
             return hidden_states_dict
         return inner_loop()
                                

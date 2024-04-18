@@ -71,7 +71,8 @@ def main():
     if args.model_name in MODEL_CONFIGS: # for chat_models
         model_config = MODEL_CONFIGS[args.model_name]
         model, tokenizer = load_model_and_tokenizer(**model_config)
-        template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))
+        template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))['prompt']
+        print(template)
         mw = ModelWrapper(model, tokenizer, template = template)
     else:
         model = AutoModelForCausalLM.from_pretrained(args.model_name, torch_dtype=torch.float16, device_map="auto").eval()
@@ -163,10 +164,10 @@ def main():
                 layers = list(range(mw.model.config.num_hidden_layers))
 
             acts_dict = mw.batch_hiddens(prompts,
-                                            layers = layers,
-                                            tok_idxs = tok_idxs,
-                                            return_types = args.act_types,
-                                            logging = args.logging
+                                        layers = layers,
+                                        tok_idxs = tok_idxs,
+                                        return_types = args.act_types,
+                                        logging = args.logging
                                         )
 
             for act_type in args.act_types:
