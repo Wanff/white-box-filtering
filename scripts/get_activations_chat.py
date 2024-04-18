@@ -29,8 +29,8 @@ def parse_args():
                         help="The path for saving activations")
     parser.add_argument("--file_spec", type =str, 
                         help="string appended to saved acts")
-    parser.add_argument("--use_fs", action="store_true",
-                        help="Use the fast chat template. Defaults to false with the question/n/nAnswer: format")
+    parser.add_argument("--use_simple", action="store_true",
+                        help="Use the question/n/nAnswer: format instead of fast chat")
     parser.add_argument('--device', type=str, default='cuda', 
                         help='Device to run the model on')
     
@@ -56,10 +56,10 @@ def main():
     tokenizer.pad_token = tokenizer.eos_token
     model.to(args.device)
 
-    if args.use_fs: 
-        template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))['prompt']
-    else: 
+    if args.use_simple: 
         template = '{instruction}\n\nAnswer:'
+    else: 
+        template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))['prompt']
     
     mw = ModelWrapper(model, tokenizer, template = template)
 

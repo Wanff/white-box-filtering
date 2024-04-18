@@ -34,6 +34,13 @@ MODEL_CONFIGS = {
     },
 }
 
+LORA_MODELS = {
+    "akdeniz27/llama-2-7b-hf-qlora-dolly15k-turkish": {
+        "model_name_or_path": "akdeniz27/llama-2-7b-hf-qlora-dolly15k-turkish",
+        "chat_template": "llama-2",
+    },
+}
+
 
 ########## PROMPTS ###########
 ALPACA_PROMPT = {

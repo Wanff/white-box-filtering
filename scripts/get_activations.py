@@ -14,6 +14,7 @@ import argparse
 import gc
 import pickle
 
+from peft import PeftConfig, AutoPeftModelForCausalLM
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from datasets import Dataset, load_from_disk, load_dataset
 
@@ -22,7 +23,7 @@ sys.path.append('../')  # Add the parent directory to the path
 
 from white_box.utils import char_by_char_similarity, tok_by_tok_similarity, levenshtein_distance, ceildiv, gen_pile_data
 from white_box.model_wrapper import ModelWrapper
-from white_box.chat_model_utils import load_model_and_tokenizer, get_template, MODEL_CONFIGS
+from white_box.chat_model_utils import load_model_and_tokenizer, get_template, MODEL_CONFIGS, LORA_MODELS
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -34,6 +35,10 @@ def parse_args():
                         help="The path for saving activations")
     parser.add_argument("--file_spec", type =str, 
                         help="string appended to saved acts")
+    parser.add_argument("--use_simple", action="store_true",
+                        help="Use the question/n/nAnswer: format instead of fast chat. ")
+    parser.add_argument('--device', type=str, default='cuda', 
+                        help='Device to run the model on')
 
     # Activation saving arguments
     parser.add_argument("--act_types", nargs="+", default = ['resid'],
@@ -58,27 +63,35 @@ def parse_args():
     args = parser.parse_args()
     return args
 
-
-def main():
-    args = parse_args()
-    
-    print(args)
- 
-    # set seed
-    torch.manual_seed(args.seed)
-    np.random.seed(args.seed)
-    
+def get_mw(args): 
     if args.model_name in MODEL_CONFIGS: # for chat_models
         model_config = MODEL_CONFIGS[args.model_name]
         model, tokenizer = load_model_and_tokenizer(**model_config)
-        template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))
-        mw = ModelWrapper(model, tokenizer, template = template)
-    else:
+    elif args.model_name in LORA_MODELS: 
+        assert args.device == 'cuda', "LoRA models only work on cuda"
+        config = PeftConfig.from_pretrained(args.model_name)
+        model = AutoPeftModelForCausalLM.from_pretrained(
+            args.model_name,
+            low_cpu_mem_usage=True, 
+            torch_dtype=torch.float16, 
+            load_in_4bit=True,
+        ).model
+        tokenizer = AutoTokenizer.from_pretrained(config.base_model_name_or_path, padding_side="left")
+        model_config = LORA_MODELS[args.model_name]
+    else: 
         model = AutoModelForCausalLM.from_pretrained(args.model_name, torch_dtype=torch.float16, device_map="auto").eval()
         tokenizer = AutoTokenizer.from_pretrained(args.model_name, padding_side="left")
-        tokenizer.pad_token = tokenizer.eos_token
-        mw = ModelWrapper(model, tokenizer)
+        assert args.use_simple, "Only simple chat is supported for non-chat models"
     
+    tokenizer.pad_token = tokenizer.eos_token
+    if args.use_simple: 
+        template = '{instruction}\n\nAnswer: '
+    else: 
+        template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))['prompt']
+    mw = ModelWrapper(model, tokenizer, template = template)
+    return mw
+
+def get_data(args, tokenizer):
     if 'pythia-evals' in args.dataset_name_or_path: 
         if "deduped" in args.model_name:
             #model_name looks like: EleutherAI/pythia-12B-deduped
@@ -115,72 +128,11 @@ def main():
             #! not fleshed out
             dataset = load_dataset("csv", data_files=args.dataset_name_or_path)
             prompts = dataset['train']['prompt']
+        toks = tokenizer(prompts, return_tensors = 'pt', padding = True)['input_ids']
     
     tok_idxs = [int(i) for i in args.tok_idxs]
     print(tok_idxs)
-    if args.mem:
-        # tok_idxs =  (7 * np.arange(10)).tolist() #every 5th token #! when doing pythia, tok_idxs should look like this
-        # tok_idxs[-1]= tok_idxs[-1] - 1 #goes from 63 to 62
-
-        if args.max_new_tokens > 0:
-            hidden_states, generations, gen_tokens, mem_status = get_memmed_activations(mw,
-                                                                                    toks, 
-                                                                                    args.save_path,
-                                                                                    save_every = args.save_every,
-                                                                                    N_TOKS = args.max_new_tokens,
-                                                                                    layers = args.layers,
-                                                                                    tok_idxs = tok_idxs,
-                                                                                    return_prompt_acts = args.return_prompt_acts,
-                                                                                    logging = args.logging,
-                                                                                file_spec = args.file_spec)
-        else:
-            acts_dict = get_memmed_activations_from_pregenned(mw,
-                                                            gen_tokens,
-                                                            args.save_path,
-                                                            act_types = args.act_types,
-                                                            save_every = args.save_every,
-                                                            layers = args.layers,
-                                                            tok_idxs = tok_idxs,
-                                                            logging = args.logging,
-                                                            file_spec = args.file_spec + "attn_mlp_")
-    else:
-        if args.max_new_tokens > 0:
-            hidden_states, generations, gen_tokens = get_activations_autoreg_generic(mw,
-                                                                                    toks, 
-                                                                                    args.save_path,
-                                                                                    save_every = args.save_every,
-                                                                                    max_new_tokens = args.max_new_tokens,
-                                                                                    layers = args.layers,
-                                                                                    return_prompt_acts = args.return_prompt_acts,
-                                                                                    logging = args.logging,
-                                                                                    tok_idxs = tok_idxs,
-                                                                                    file_spec = args.file_spec)
-        else:
-            if not os.path.exists(args.save_path):
-                os.makedirs(args.save_path)
-            
-            if args.layers is None:
-                layers = list(range(mw.model.config.num_hidden_layers))
-
-            acts_dict = mw.batch_hiddens(prompts,
-                                            layers = layers,
-                                            tok_idxs = tok_idxs,
-                                            return_types = args.act_types,
-                                            logging = args.logging
-                                        )
-            #! this should not be a dict
-            for act_type in args.act_types:
-                if act_type == 'resid':
-                    torch.save(acts_dict[act_type], args.save_path + f"/{args.file_spec}hidden_states.pt")
-                else:
-                    torch.save(acts_dict[act_type], args.save_path + f"/{args.file_spec}{act_type}.pt")
-            
-    gc.collect()
-    torch.cuda.empty_cache()
-    print("Done")
-    
-
-
+    return prompts, toks, tok_idxs
 
 def get_memmed_activations_from_pregenned(mw: ModelWrapper, prompts: Union[List[str],List[int]],
                                           save_path: str,
@@ -472,6 +424,81 @@ def get_activations_autoreg_generic(mw: ModelWrapper, prompts: Union[List[str], 
         os.remove(save_path + f"/{file_spec}check{batch_idx}_all_hidden_states.pt")
         
     return all_hidden_states, all_generations, all_tokens
+
+
+def main():
+    args = parse_args()
+    
+    print(args)
+ 
+    # set seed
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+    
+    mw = get_mw(args)
+    prompts, toks, tok_idxs = get_data(args, mw.tokenizer)
+
+    if args.mem:
+        # tok_idxs =  (7 * np.arange(10)).tolist() #every 5th token #! when doing pythia, tok_idxs should look like this
+        # tok_idxs[-1]= tok_idxs[-1] - 1 #goes from 63 to 62
+
+        if args.max_new_tokens > 0:
+            hidden_states, generations, gen_tokens, mem_status = get_memmed_activations(mw,
+                                                                                    toks, 
+                                                                                    args.save_path,
+                                                                                    save_every = args.save_every,
+                                                                                    N_TOKS = args.max_new_tokens,
+                                                                                    layers = args.layers,
+                                                                                    tok_idxs = tok_idxs,
+                                                                                    return_prompt_acts = args.return_prompt_acts,
+                                                                                    logging = args.logging,
+                                                                                file_spec = args.file_spec)
+        else:
+            acts_dict = get_memmed_activations_from_pregenned(mw,
+                                                            gen_tokens,
+                                                            args.save_path,
+                                                            act_types = args.act_types,
+                                                            save_every = args.save_every,
+                                                            layers = args.layers,
+                                                            tok_idxs = tok_idxs,
+                                                            logging = args.logging,
+                                                            file_spec = args.file_spec + "attn_mlp_")
+    else:
+        if args.max_new_tokens > 0:
+            hidden_states, generations, gen_tokens = get_activations_autoreg_generic(mw,
+                                                                                    toks, 
+                                                                                    args.save_path,
+                                                                                    save_every = args.save_every,
+                                                                                    max_new_tokens = args.max_new_tokens,
+                                                                                    layers = args.layers,
+                                                                                    return_prompt_acts = args.return_prompt_acts,
+                                                                                    logging = args.logging,
+                                                                                    tok_idxs = tok_idxs,
+                                                                                    file_spec = args.file_spec)
+        else:
+            if not os.path.exists(args.save_path):
+                os.makedirs(args.save_path)
+            
+            if args.layers is None:
+                layers = list(range(mw.model.config.num_hidden_layers))
+
+            acts_dict = mw.batch_hiddens(prompts,
+                                            layers = layers,
+                                            tok_idxs = tok_idxs,
+                                            return_types = args.act_types,
+                                            logging = args.logging
+                                        )
+            #! this should not be a dict
+            for act_type in args.act_types:
+                if act_type == 'resid':
+                    torch.save(acts_dict[act_type], args.save_path + f"/{args.file_spec}hidden_states.pt")
+                else:
+                    torch.save(acts_dict[act_type], args.save_path + f"/{args.file_spec}{act_type}.pt")
+            
+    gc.collect()
+    torch.cuda.empty_cache()
+    print("Done")
+    
 
 if __name__ == "__main__":
     main()
