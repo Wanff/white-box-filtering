@@ -16,7 +16,8 @@ from white_box.monitor import Monitor, ActMonitor, TextMonitor
 @dataclass
 class GCGConfig:
     num_steps: int = 75
-    optim_str_init: str = "! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !"
+    # optim_str_init: str = "! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !"
+    optim_str_init: str = "! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !"
     search_width: int = 512
     topk: int = 256
     n_replace: int = 1
@@ -24,6 +25,7 @@ class GCGConfig:
     add_space_before_target: bool = True
     device: str = "cuda"
     gcg_loss_weight : float = 1.0
+    monitor_loss_weight : float = 1.0
     use_search_width_sched : bool = False
 
 class AttackBuffer:
@@ -158,6 +160,7 @@ def compute_candidates_loss(
             the token ids of the target sequence 
     """
     all_loss = []
+    
     for i in range(0, input_embeds.shape[0], search_batch_size):
         with torch.no_grad():
             input_embeds_batch = input_embeds[i:i+search_batch_size]
@@ -172,15 +175,15 @@ def compute_candidates_loss(
             outputs = model(inputs_embeds=input_embeds_batch, past_key_values=kv_cache_batch, output_hidden_states = True if monitor is not None else False)
             logits = outputs.logits
 
-            tmp = input_embeds.shape[1] - target_ids.shape[1]
-            shift_logits = logits[..., tmp-1:-1, :].contiguous()
+            shift = input_embeds.shape[1] - target_ids.shape[1]
+            shift_logits = logits[..., shift-1:-1, :].contiguous()
             shift_labels = target_ids.repeat(current_batch_size, 1)
 
             if isinstance(monitor, ActMonitor):
                 monitor_input = slice_acts(outputs, 
                         N_TOKS = 0, 
                         layers = monitor.layer,
-                        tok_idxs = torch.tensor(monitor.tok_idxs) - tmp,
+                        tok_idxs = torch.tensor(monitor.tok_idxs) - target_ids.shape[1],
                         return_prompt_acts = False)
             elif isinstance(monitor, TextMonitor):
                 assert input_ids is not None, "TextMonitor requires input_ids"
@@ -190,7 +193,7 @@ def compute_candidates_loss(
             del monitor_input
             clear_gpus()
             
-            loss = config.gcg_loss_weight * torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1), reduction="none") + monitor_loss
+            loss = config.gcg_loss_weight * torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1), reduction="none") + config.monitor_loss_weight * monitor_loss
             loss = loss.view(current_batch_size, -1).mean(dim=-1)
             all_loss.append(loss)
 
@@ -242,7 +245,6 @@ def run(
         else:
             return config.search_width
         
-        
     if config == None:
         config = GCGConfig()
     
@@ -257,20 +259,19 @@ def run(
     if mw.tokenizer.bos_token and template.startswith(mw.tokenizer.bos_token):
         template = template.replace(mw.tokenizer.bos_token, "")
     before_str, after_str = template.split("{optim_str}")
-
     target = " " + target if config.add_space_before_target else target
+    print(f"before, after, target : {before_str} | {after_str} | {target}")
 
     # Tokenize everything that doesn't get optimized
     before_ids = mw.tokenizer([before_str], padding=False)["input_ids"]
     after_ids = mw.tokenizer([after_str], add_special_tokens=False)["input_ids"]
     target_ids = mw.tokenizer([target], add_special_tokens=False)["input_ids"]
-
     before_ids, after_ids, target_ids = [torch.tensor(ids, device=mw.model.device) for ids in (before_ids, after_ids, target_ids)]
 
     # Embed everything that doesn't get optimized
     embedding_layer = mw.model.get_input_embeddings()
     before_embeds, after_embeds, target_embeds = [embedding_layer(ids) for ids in (before_ids, after_ids, target_ids)]
-
+    
     # Compute the KV Cache for tokens that appear before the optimized tokens
     with torch.no_grad():
         output = mw.model(inputs_embeds=before_embeds, use_cache=True)
@@ -285,7 +286,7 @@ def run(
             after_embeds.repeat(buffer_ids.shape[0], 1, 1),
             target_embeds.repeat(buffer_ids.shape[0], 1, 1)
         ], dim=1)    
-    
+        
     loss = find_executable_batch_size(compute_candidates_loss, buffer_ids.shape[0])(
             mw.model,
             kv_cache,
@@ -298,8 +299,10 @@ def run(
         buffer.add(loss=loss[i].item(), optim_ids=buffer_ids[i].unsqueeze(0))
     
     losses = []
+    monitor_losses = []
+    gcg_losses = []
     optim_strings = []
-    for i in tqdm(range(config.num_steps)):
+    for i in range(config.num_steps):
         optim_ids = buffer.get_best_ids()
         
         # Create the one-hot encoding matrix of our optimized token ids
@@ -322,7 +325,7 @@ def run(
             monitor_input = slice_acts(output, 
                         N_TOKS = 0, 
                         layers = monitor.layer,
-                        tok_idxs =torch.tensor(monitor.tok_idxs) - shift,
+                        tok_idxs = torch.tensor(monitor.tok_idxs) - target_ids.shape[1],
                         return_prompt_acts = False)
         elif isinstance(monitor, TextMonitor):
             monitor_input =  mw.tokenizer.batch_decode(before_ids ) + mw.tokenizer.batch_decode(optim_ids) + mw.tokenizer.batch_decode(after_ids) #! fix
@@ -331,20 +334,26 @@ def run(
         del monitor_input
         clear_gpus()
         
+        gcg_loss = torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+        
+        print(f"monitor_loss : {monitor_loss} | gcg_loss : {gcg_loss} | search_width : {search_width_sched(buffer.n_repeat)} | n_replace : {n_replace_sched(i)}")
+        
+        loss = config.gcg_loss_weight * gcg_loss + config.monitor_loss_weight * monitor_loss
+        
+        losses.append(loss)
+        monitor_losses.append(monitor_loss)
+        gcg_losses.append(gcg_losses)
         if torch.argmax(shift_logits, dim=-1).eq(shift_labels).all() and monitor_loss < 0.5: #* the reason this is diff is because im getting loss on the target completion but testing the probe before the target completion
             print("Early Stopping Condition Met")
             print(torch.argmax(shift_logits, dim=-1))
             print(shift_labels)
             return {
                 "losses": losses,
+                "monitor_losses": monitor_losses,
+                "gcg_losses" : gcg_losses, 
                 "optim_strings": optim_strings,
             }
             
-        gcg_loss = torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-        
-        print(f"monitor_loss : {monitor_loss} | gcg_loss : {gcg_loss} | search_width : {search_width_sched(buffer.n_repeat)} | n_replace : {n_replace_sched(i)}")
-        
-        loss = config.gcg_loss_weight * gcg_loss + monitor_loss
         optim_ids_onehot_grad = torch.autograd.grad(outputs=[loss], inputs=[optim_ids_onehot])[0]
 
         # Sample candidate token sequences
@@ -359,6 +368,11 @@ def run(
         sampled_ids = filter_ids(sampled_ids, mw.tokenizer)
         if len(sampled_ids) == 0:
             print("No good sampled ids")
+            if len(optim_strings) == 0:
+                print(f"step: {i} | optim_str: None found yet | loss: {buffer.get_lowest_loss()}")
+            else:
+                print(f"step: {i} | optim_str: {optim_strings[-1]} | loss: {buffer.get_lowest_loss()}")
+
             continue 
         
         new_search_width = sampled_ids.shape[0]
@@ -380,8 +394,7 @@ def run(
         )
 
         current_loss = loss.min().item()
-        losses.append(current_loss)
-
+                
         # # get the buffer_size best optim_ids, sorted from lowest loss to highest loss
         # buffer_idxs = loss.argsort()[:config.buffer_size]
         # # for each optim_ids, add it to buffer if its loss is less than highest loss, if not, then break from the loop
@@ -402,5 +415,8 @@ def run(
     
     return {
         "losses": losses,
+        "monitor_losses": monitor_losses,
+        "gcg_losses" : gcg_losses, 
         "optim_strings": optim_strings,
     }
+            
