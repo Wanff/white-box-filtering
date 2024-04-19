@@ -295,6 +295,7 @@ def run(
             input_embeds,
             target_ids,
             monitor, 
+            sampled_ids = buffer_ids,
             config = config
         )
     for i in range(config.buffer_size):
@@ -338,6 +339,8 @@ def run(
         
         gcg_loss = torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
         
+        model_preds = torch.argmax(shift_logits, dim=-1)
+        print(f"model preds : {mw.tokenizer.decode(model_preds.squeeze(0))}")
         print(f"monitor_loss : {monitor_loss} | gcg_loss : {gcg_loss} | search_width : {search_width_sched(buffer.n_repeat)} | n_replace : {n_replace_sched(i)}")
         
         loss = config.gcg_loss_weight * gcg_loss + config.monitor_loss_weight * monitor_loss
@@ -345,9 +348,9 @@ def run(
         losses.append(loss)
         monitor_losses.append(monitor_loss)
         gcg_losses.append(gcg_losses)
-        if torch.argmax(shift_logits, dim=-1).eq(shift_labels).all() and monitor_loss < 0.5: #* the reason this is diff is because im getting loss on the target completion but testing the probe before the target completion
+        if model_preds.eq(shift_labels).all() and monitor_loss < 0.5: #* the reason this is diff is because im getting loss on the target completion but testing the probe before the target completion
             print("Early Stopping Condition Met")
-            print(torch.argmax(shift_logits, dim=-1))
+            print(model_preds)
             print(shift_labels)
             return {
                 "losses": losses,

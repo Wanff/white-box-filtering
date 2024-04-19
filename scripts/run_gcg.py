@@ -11,8 +11,8 @@ import datasets
 from datasets import load_dataset
 from dataclasses import dataclass
 from transformers import AutoTokenizer, AutoModelForCausalLM
-import jailbreakbench as jbb 
 import argparse 
+import json
 
 import sys
 sys.path.append('../') 
@@ -53,6 +53,7 @@ def parse_args():
                     help = "")
     parser.add_argument("--use_search_width_sched", action="store_true",
                     help = "")
+    parser.add_argument("--seed", type = int, default = 0)
     
     # Monitor Args
     parser.add_argument('--monitor_type', type = str, help = "can be act or text")
@@ -71,6 +72,9 @@ def parse_args():
 if __name__=="__main__":
     args = parse_args()
     print(args)
+
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
     
     model_config = MODEL_CONFIGS[args.model_name]
     model, tokenizer = load_model_and_tokenizer(**model_config)
@@ -122,6 +126,8 @@ if __name__=="__main__":
         attack_res = run(mw, messages = row['goal'], target = row['target'], monitor = monitor, config = gcg_config)
         results.append(attack_res)
 
-    pickle.dump(results, open(f"{args.path}/{args.file_spec}.pkl", "wb"))
+    with open(args.save_path, 'a') as f:
+        for res in results:
+            f.write(json.dumps(res) + '\n')
 
 #python run_gcg.py &> ../data/llama2_7b/gcg_run2.out &

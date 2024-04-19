@@ -60,11 +60,12 @@ class TextMonitor(Monitor):
         self.before_str = before_str
         self.after_str = after_str
     
-    def get_monitor_input(self, optim_strs : Union[str, torch.tensor, List[str]]) -> List[str]:
+    def get_monitor_input(self, optim_strs : Union[str, torch.Tensor, List[str]]) -> List[str]:
         assert self.before_str is not None and self.after_str is not None
+
         if isinstance(optim_strs, str):
             optim_strs = [optim_strs]
-        elif isinstance(optim_strs, torch.tensor)
+        elif isinstance(optim_strs, torch.Tensor):
             optim_strs = self.tokenizer.batch_decode(optim_strs)
         
         return [self.before_str + optim_str + self.after_str for optim_str in optim_strs]
