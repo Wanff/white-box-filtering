@@ -34,6 +34,13 @@ MODEL_CONFIGS = {
     },
 }
 
+LORA_MODELS = {
+    "akdeniz27/llama-2-7b-hf-qlora-dolly15k-turkish": {
+        "model_name_or_path": "akdeniz27/llama-2-7b-hf-qlora-dolly15k-turkish",
+        "chat_template": "llama-2",
+    },
+}
+
 
 ########## PROMPTS ###########
 ALPACA_PROMPT = {
@@ -293,16 +300,15 @@ def load_model_and_tokenizer(
         legacy=legacy,
         padding_side=padding_side,
     )
-    # if pad_token:
-    #     tokenizer.pad_token = pad_token
-    # if eos_token:
-    #     tokenizer.eos_token = eos_token
+    if pad_token:
+        tokenizer.pad_token = pad_token
+    if eos_token:
+        tokenizer.eos_token = eos_token
 
-    # if tokenizer.pad_token is None or tokenizer.pad_token_id is None:
-    #     print("Tokenizer.pad_token is None, setting to tokenizer.unk_token")
-    #     tokenizer.pad_token = tokenizer.unk_token
-    #     print("tokenizer.pad_token", tokenizer.pad_token)
-    tokenizer.pad_token = tokenizer.eos_token
+    if tokenizer.pad_token is None or tokenizer.pad_token_id is None:
+        print("Tokenizer.pad_token is None, setting to tokenizer.unk_token")
+        tokenizer.pad_token = tokenizer.eos_token
+        print("tokenizer.pad_token", tokenizer.pad_token)
     
     return model, tokenizer
 

@@ -13,9 +13,13 @@ from sklearn.model_selection import train_test_split
 from datasets import Dataset, load_dataset, load_from_disk, DatasetDict
 from transformers import AutoTokenizer
 from dataclasses import dataclass
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, roc_auc_score
 
 from white_box.utils import eval_completions, ceildiv, gen_pile_data
 from white_box.model_wrapper import ModelWrapper
+from white_box.probes import Probe, LRProbe
 
 #* clean memorized data 
 def clean_data(data : Union[List[str], List[int]], tokenizer : AutoTokenizer, 
@@ -137,12 +141,17 @@ class PromptDist:
     path_to_states : str
     path_to_metadata : str
 
-def create_prompt_dist_from_metadata_path(path_to_metadata : str, col_filter : str, n : int = None) -> PromptDist:
+def instantiate_metadata(path_to_metadata : str):
     if "jb" in path_to_metadata:
         sep = "t"
     else:
         sep = ","
-    metadata = pd.read_csv(path_to_metadata, sep = sep)
+    metadata = pd.read_csv(path_to_metadata, sep = sep) 
+    return metadata
+
+def create_prompt_dist_from_metadata_path(path_to_metadata : str, col_filter : str, n : int = None) -> PromptDist:
+    metadata = instantiate_metadata(path_to_metadata)
+    
     path_to_states = path_to_metadata.replace('metadata.csv', 'hidden_states.pt')
     filtered_metadata = metadata[eval(col_filter)]
     if n is not None:
@@ -184,14 +193,14 @@ class ActDataset:
     def instantiate(self):
         if self.pos:
             pos_states = torch.cat([torch.load(x.path_to_states)[x.idxs] for x in self.pos])
-            pos_metadata_idxs = np.array([x.idxs for x in self.pos]).flatten()
+            pos_metadata_idxs = np.hstack([x.idxs for x in self.pos]).flatten() #! this will not work when the states come from different metadata files
         else:
             pos_states = torch.tensor([])
             pos_metadata_idxs = []
         
         if self.neg:
             neg_states = torch.cat([torch.load(x.path_to_states)[x.idxs] for x in self.neg])
-            neg_metadata_idxs = np.array([x.idxs for x in self.neg]).flatten()
+            neg_metadata_idxs = np.hstack([x.idxs for x in self.neg]).flatten()
         else:
             neg_states = torch.tensor([])
             neg_metadata_idxs = []
@@ -203,16 +212,7 @@ class ActDataset:
          
         return self.X, self.y
     
-    def train_test_split(self,
-                        test_size : float = 0.2, 
-                        layer : int = None,
-                        tok_idxs : List[int] = None,
-                        random_state : int = 0,
-                        balanced : bool = True):
-        
-        assert self.X is not None, "You must instantiate the dataset first"
-        
-        def convert_states(states, labels):
+    def convert_states(self, states : torch.tensor, labels : torch.tensor, tok_idxs : List[int] = None, layer : int = None):
             if tok_idxs is not None:
                 labels = labels.view(-1, 1).expand(-1, len(tok_idxs)).flatten()
                 if layer is not None:
@@ -225,17 +225,26 @@ class ActDataset:
             
             return labels, states
         
+    def train_test_split(self,
+                        test_size : float = 0.2, 
+                        layer : int = None,
+                        tok_idxs : List[int] = None,
+                        random_state : int = 0,
+                        balanced : bool = True):
+        
+        assert self.X is not None, "You must instantiate the dataset first"
+        
         # self.train_indices, self.test_indices  = train_test_split(np.arange(len(labels)), test_size = test_size, random_state = random_state, stratify = labels if balanced else None)
-        train_idxs, test_idxs = train_test_split(np.arange(len(self.metadata_idxs)), test_size = test_size, random_state = random_state, stratify = self.y if balanced else None)
-        self.metadata_train_idxs, self.metadata_test_idxs = np.array([self.metadata_idxs[i] for i in train_idxs]), np.array([self.metadata_idxs[i] for i in test_idxs])
+        self.train_idxs, self.test_idxs = train_test_split(np.arange(len(self.metadata_idxs)), test_size = test_size, random_state = random_state, stratify = self.y if balanced else None)
+        self.metadata_train_idxs, self.metadata_test_idxs = np.array([self.metadata_idxs[i] for i in self.train_idxs]), np.array([self.metadata_idxs[i] for i in self.test_idxs])
         
-        train_states = self.X[train_idxs]
-        test_states = self.X[test_idxs]
-        train_labels = self.y[train_idxs]
-        test_labels = self.y[test_idxs]
+        train_states = self.X[self.train_idxs]
+        test_states = self.X[self.test_idxs]
+        train_labels = self.y[self.train_idxs]
+        test_labels = self.y[self.test_idxs]
         
-        train_labels, train_states = convert_states(train_states, train_labels)
-        test_labels, test_states = convert_states(test_states, test_labels)
+        train_labels, train_states = self.convert_states(train_states, train_labels, tok_idxs = tok_idxs, layer = layer)
+        test_labels, test_states = self.convert_states(test_states, test_labels, tok_idxs = tok_idxs, layer = layer)
         
         return train_states, test_states, train_labels, test_labels
 
@@ -343,7 +352,7 @@ def gen_prefix_dataset_strings(prompts : List[str], tokenizer : AutoTokenizer, p
     return [pile_prefix + prompt  for prompt, pile_prefix in zip(prompts, pile_data)]
 
 
-from white_box.probes import LRProbe
+from white_box.probes import LRProbe, MMProbe
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, roc_auc_score
@@ -353,10 +362,11 @@ class ProbeDataset():
         if dataset.X is None:
             dataset.instantiate()
         
-        self.dataset = dataset
+        self.act_dataset = dataset
+        self.metadata = instantiate_metadata(dataset.pos[0].path_to_metadata)
         
-        self.N_LAYERS = self.dataset.X.shape[1]
-        self.N_TOKS = self.dataset.X.shape[2]
+        self.N_LAYERS = self.act_dataset.X.shape[1]
+        self.N_TOKS = self.act_dataset.X.shape[2]
     
     def layer_sweep_results(self,
                             lr : float = 0.01,
@@ -368,7 +378,7 @@ class ProbeDataset():
         probe_accs = [[None for _ in range(self.N_TOKS)] for _ in range(self.N_LAYERS)]
         probe_aucs = [[None for _ in range(self.N_TOKS)] for _ in range(self.N_LAYERS)]
         
-        train_states, val_states, y_train, y_val = self.dataset.train_test_split(test_size = test_size, layer = None, tok_idxs = None, random_state = 0)
+        train_states, val_states, y_train, y_val = self.act_dataset.train_test_split(test_size = test_size, layer = None, tok_idxs = None, random_state = 0)
         
         for layer in tqdm(range(self.N_LAYERS)):
             for tok_idx in range(self.N_TOKS):
@@ -392,28 +402,46 @@ class ProbeDataset():
                     weight_decay : float = 1,
                     epochs : int = 500,
                     use_bias : bool = True,
-                    test_size = 0.2):
+                    test_size = 0.2, 
+                    device = 'cuda'): 
         
-        X_train, X_val, y_train, y_val = self.dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = 0)
+        X_train, X_val, y_train, y_val = self.act_dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = 0)
         
         probe = LRProbe.from_data(X_train, y_train, 
                                 lr = lr, 
                                 weight_decay = weight_decay, 
                                 epochs = epochs, 
                                 use_bias = use_bias,
-                                device = "cuda")
+                                device = device)
 
-        acc = probe.get_probe_accuracy(X_val, y_val, device = "cuda")
-        auc = probe.get_probe_auc(X_val, y_val, device = "cuda")
+        acc = probe.get_probe_accuracy(X_val, y_val, device = device)
+        auc = probe.get_probe_auc(X_val, y_val, device = device)
         
+        return acc, auc, probe
+    
+    def train_mm_probe(self, layer : int, tok_idxs : List[int],
+                            test_size = 0.2, 
+                            device='cuda',
+                       ):
+        X_train, X_val, y_train, y_val = self.act_dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = 0)
+        probe = MMProbe.from_data(X_train.to(device), y_train.to(device), device=device)
+
+        # center val data
+        X_val = X_val - X_val.mean(0)
+
+        acc = probe.get_probe_accuracy(X_val, y_val, device = device)
+        auc = probe.get_probe_auc(X_val, y_val, device = device)
+
         return acc, auc, probe
     
     def train_sk_probe(self, layer : int, tok_idxs : List[int], 
                        max_iter = 3000,
                        C = 1e-5,
-                       test_size = 0.2
-                       ):
-        X_train, X_val, y_train, y_val = self.dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = 0)
+                       test_size = 0.2,
+                       return_torch_probe : bool = True,
+                       random_state : int = 0,
+                        ): 
+        X_train, X_val, y_train, y_val = self.act_dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = random_state)
 
         probe_lr = LogisticRegression(max_iter = max_iter, C = C)
         probe_lr.fit(X_train.numpy(), y_train.numpy())
@@ -422,4 +450,32 @@ class ProbeDataset():
         accuracy = accuracy_score(y_val.numpy(), y_pred)
         auc = roc_auc_score(y_val.numpy(), probe_lr.predict_proba(X_val.numpy())[:, 1])
         
-        return accuracy, auc, probe_lr
+        if return_torch_probe:
+            return accuracy, auc, self.convert_sk_probe_to_torch_probe(probe_lr)
+        else:
+            return accuracy, auc, probe_lr
+    
+    def convert_sk_probe_to_torch_probe(self, probe_lr):
+        return LRProbe.from_weights(torch.tensor(probe_lr.coef_), torch.tensor(probe_lr.intercept_))
+    def idxs_probe_gets_wrong(self, probe : Probe, 
+                              layer : int , 
+                              tok_idxs : List[int],
+                              pred_method : str = "mean",
+                              thresh : float = 0.5):
+        assert self.act_dataset.metadata_test_idxs is not None, "train_test_split needs to already have been called"
+        val_idxs = self.act_dataset.test_idxs
+        val_labels = self.act_dataset.y[val_idxs]
+
+        probas = probe.predict_proba(self.act_dataset.X[val_idxs][:, layer, tok_idxs]).cpu().detach()
+        if pred_method == "mean":
+            preds = (probas.mean(dim = 1) > thresh)
+        elif pred_method == "any":
+            preds = (probas.any(dim = 1))
+        
+        assert len(preds) == len(val_labels)
+        res = (preds == val_labels)
+        acc = res.sum() / len(val_labels)
+        print(f"Acc: {acc}")
+        return self.act_dataset.metadata_test_idxs[torch.where(res == 0)[0]]
+        
+        

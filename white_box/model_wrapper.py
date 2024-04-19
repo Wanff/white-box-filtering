@@ -254,7 +254,7 @@ def detokenize_to_list(tokenizer, input_ids):
     return [[tokenizer.decode(input_ids[i][j]) for j in range(len(input_ids[0]))] for i in range(len(input_ids))]
 
 def slice_acts(out, N_TOKS: int, return_prompt_acts: bool, layers: List, tok_idxs: List = None, device: str = 'cpu'):
-    """slices acts out of huggingface modeloutput object
+    """slices acts out of huggingface modeloutput object, have to + 1 layers
 
     Args:
         out (_type_): _description_
@@ -272,12 +272,14 @@ def slice_acts(out, N_TOKS: int, return_prompt_acts: bool, layers: List, tok_idx
         acts = torch.stack(out.hidden_states, dim = 1) #this is when you just call model(), not generate
     elif N_TOKS == 1:
         acts = torch.stack([torch.cat(out.hidden_states[0], dim = 1)], dim = 1)  #1, N_TOKS bc the first index is all previous tokens
+        acts = rearrange(acts, 'b t l d -> b l t d')
     else:
         #first loop goes through the tokens, second loop goes through the layers or something
         acts = torch.stack([torch.cat(out.hidden_states[i], dim = 1) for i in range(1, N_TOKS)], dim = 1)  #1, N_TOKS bc the first index is all previous tokens
+        acts = rearrange(acts, 'b t l d -> b l t d')
+
     #shape: batch_size x N_TOKS - 1 x n_layers + 1 x d_M
     #n_layers + 1 bc of embedding, N_TOKS - 1 bc of how max_new_tokens works
-    acts = rearrange(acts, 'b t l d -> b l t d')
 
     if return_prompt_acts:
         prompt_acts = torch.stack(out.hidden_states[0], dim = 0) #shape: n_layers + 1 x batch_size x seq_len x d_M
@@ -289,7 +291,7 @@ def slice_acts(out, N_TOKS: int, return_prompt_acts: bool, layers: List, tok_idx
         
     if tok_idxs is not None:
         acts = acts[:, :, tok_idxs]
-    acts = acts[:, layers]
+    acts = acts[:, torch.tensor(layers) + 1]
     return acts
 
 def rename_attribute(object_, old_attribute_name, new_attribute_name):
@@ -361,10 +363,10 @@ class ModelWrapper(torch.nn.Module):
         input_ids, attention_mask = self.process_prompts(prompts)
         return self.model.generate(input_ids = input_ids, attention_mask = attention_mask, **kwargs)
 
-    def process_prompts(self, prompts : Union[List[str], List[int]]):
+    def process_prompts(self, prompts : Union[List[str], List[int]], use_chat_template : bool = True):
         if isinstance(prompts[0], str):
-            if self.template is not None:
-                prompts = [self.template['prompt'].format(instruction=s) for s in prompts]
+            if self.template is not None and use_chat_template:
+                prompts = [self.template.format(instruction=s) for s in prompts]
             inputs = self.tokenizer(prompts, return_tensors="pt", padding=True, max_length=512, truncation=True)
         else:
             inputs = self.tokenizer.pad({'input_ids': prompts}, padding = True, return_attention_mask=True)
@@ -384,6 +386,7 @@ class ModelWrapper(torch.nn.Module):
                       tok_idxs: Union[List[int], int] = -1, 
                       return_types = ['resid'], 
                       logging : bool = False, 
+                      use_chat_template : bool = True,
                       **kwargs):
         """
         Takes a list of strings or tokens and returns the hidden states of the specified layers and token indices.
@@ -396,7 +399,7 @@ class ModelWrapper(torch.nn.Module):
         if isinstance(layers, int):
             layers = [layers]
             
-        @find_executable_batch_size(starting_batch_size=len(prompts) // 4)
+        @find_executable_batch_size(starting_batch_size=len(prompts) )
         def inner_loop(batch_size):
             nonlocal prompts, layers, tok_idxs, return_types, logging, kwargs
             hidden_states_dict = defaultdict(list)
@@ -407,7 +410,8 @@ class ModelWrapper(torch.nn.Module):
                 start_time = time.time()
                 tot_prompts += batch_size
                 batched_prompts = prompts[i:i+batch_size]
-                input_ids, attention_mask = self.process_prompts(batched_prompts)
+            
+                input_ids, attention_mask = self.process_prompts(batched_prompts, use_chat_template = use_chat_template)
                 outputs = self.model(input_ids = input_ids, attention_mask=attention_mask, output_hidden_states = True, **kwargs)
 
                 for act_type in return_types:
@@ -435,7 +439,7 @@ class ModelWrapper(torch.nn.Module):
                 #     print()
                 
             for act_type in hidden_states_dict:
-                hidden_states_dict[act_type] = torch.cat(hidden_states_dict[act_type], dim = 1).reshape(len(prompts), len(layers), len(tok_idxs), -1)
+                hidden_states_dict[act_type] = torch.cat(hidden_states_dict[act_type], dim = 1).transpose(0, 1)
             return hidden_states_dict
         return inner_loop()
                                

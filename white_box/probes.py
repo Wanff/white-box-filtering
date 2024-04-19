@@ -132,8 +132,8 @@ class LRProbe(t.nn.Module, Probe):
         return self(x).round()
     
     def predict_proba(self, x, iid=None):
-        if x.device != "cuda":
-            x = x.to("cuda")
+        # if x.device != "cuda":
+        #     x = x.to("cuda")
         
         if x.dtype != t.float32:
             x = x.float()

@@ -110,17 +110,17 @@ def tpr_at_fpr(probs, labels, target_fpr, left=0.5, right=1.0, max_steps=1000, t
     return tp / fn if fn > 0 else 0
 
 
-sim_model = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
-def sim_scores(outputs, targets):
-    semantic_scores_gen = []
-    for target, output in zip(targets, outputs):
-        embedding1 = sim_model.encode(target, convert_to_tensor=True)
-        embedding2 = sim_model.encode(output, convert_to_tensor=True)
-        cosine_sim_gen = util.pytorch_cos_sim(embedding1, embedding2)
-        similarity_value_gen = cosine_sim_gen.item()
-        semantic_scores_gen.append(similarity_value_gen)
+# sim_model = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
+# def sim_scores(outputs, targets):
+#     semantic_scores_gen = []
+#     for target, output in zip(targets, outputs):
+#         embedding1 = sim_model.encode(target, convert_to_tensor=True)
+#         embedding2 = sim_model.encode(output, convert_to_tensor=True)
+#         cosine_sim_gen = util.pytorch_cos_sim(embedding1, embedding2)
+#         similarity_value_gen = cosine_sim_gen.item()
+#         semantic_scores_gen.append(similarity_value_gen)
     
-    return semantic_scores_gen 
+#     return semantic_scores_gen 
 
 def char_by_char_similarity(outputs, targets):
     similarities = []
