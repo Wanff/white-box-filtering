@@ -72,10 +72,11 @@ class TextMonitor(Monitor):
 
     
 class ActMonitor():
-    def __init__(self, probe : Probe, layer : int, tok_idxs : List[int]):
+    def __init__(self, probe : Probe, layer : int, tok_idxs : List[int], device):
         self.probe = probe
         self.layer = layer
         self.tok_idxs = tok_idxs
+        self.device = device
 
     def predict_proba(self, acts):
         return self.probe.predict_proba(acts)

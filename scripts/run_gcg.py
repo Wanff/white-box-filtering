@@ -56,7 +56,7 @@ def parse_args():
     parser.add_argument("--seed", type = int, default = 0)
     
     # Monitor Args
-    parser.add_argument('--monitor_type', type = str, help = "can be act or text")
+    parser.add_argument('--monitor_type', type = str, help = "can be act, act_rand or text")
     parser.add_argument("--probe_layer", type = int, default = 24,
                         help="string appended to saved acts")
     parser.add_argument("--probe_data_path", type = str, default = "jb_",
@@ -82,7 +82,7 @@ if __name__=="__main__":
 
     mw = ModelWrapper(model, tokenizer, template = template)
     
-    if args.monitor_type == "act":
+    if "act" in args.monitor_type:
         layer = args.probe_layer
         neg =  create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['jb_name'] == 'harmless')")
         pos = create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['jb_name'] == 'DirectRequest')")
@@ -91,12 +91,13 @@ if __name__=="__main__":
         dataset.instantiate()
         probe_dataset = ProbeDataset(dataset)
 
-        acc, auc, probe = probe_dataset.train_sk_probe(layer, tok_idxs = list(range(5)), test_size = 0.25, C = args.probe_reg, max_iter = args.max_iter)
+        acc, auc, probe = probe_dataset.train_sk_probe(layer, tok_idxs = list(range(5)), test_size = 0.25, C = args.probe_reg, max_iter = args.max_iter, device = mw.model.device)
         print(acc, auc)
         
-        # probe  = LRProbe.from_weights(torch.rand_like(probe.net[0].weight.data), torch.rand_like(probe.net[0].bias.data)) #random probe
+        if args.monitor_type == "act_rand":
+            probe  = LRProbe.from_weights(torch.rand_like(probe.net[0].weight.data), torch.rand_like(probe.net[0].bias.data), device = mw.model.device) #random probe
 
-        monitor = ActMonitor(probe = probe, layer = layer, tok_idxs = [-1, -2, -3, -4, -5])
+        monitor = ActMonitor(probe = probe, layer = layer, tok_idxs = [-1, -2, -3, -4, -5], device = mw.model.device)
     elif args.monitor_type == "text":
         model = AutoModelForCausalLM.from_pretrained("meta-llama/LlamaGuard-7b", 
                 torch_dtype=torch.float16, 

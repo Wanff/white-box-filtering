@@ -16,7 +16,6 @@ from white_box.monitor import Monitor, ActMonitor, TextMonitor
 @dataclass
 class GCGConfig:
     num_steps: int = 75
-    # optim_str_init: str = "! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !"
     optim_str_init: str = "! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !"
     search_width: int = 512
     topk: int = 256
@@ -184,16 +183,20 @@ def compute_candidates_loss(
                         N_TOKS = 0, 
                         layers = monitor.layer,
                         tok_idxs = torch.tensor(monitor.tok_idxs) - target_ids.shape[1],
-                        return_prompt_acts = False)
+                        return_prompt_acts = False,
+                        device = monitor.device)
             elif isinstance(monitor, TextMonitor):
                 monitor_input = monitor.get_monitor_input(sampled_ids)
         
-            monitor_loss = monitor.get_loss(monitor_input).mean()
+            monitor_loss = monitor.get_loss(monitor_input).mean(dim = -1)
+            
             del monitor_input
             clear_gpus()
+            gcg_loss = config.gcg_loss_weight * torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1), reduction="none") 
+            gcg_loss = gcg_loss.view(current_batch_size, -1).mean(dim=-1)
+            monitor_loss = + config.monitor_loss_weight * monitor_loss
             
-            loss = config.gcg_loss_weight * torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1), reduction="none") + config.monitor_loss_weight * monitor_loss
-            loss = loss.view(current_batch_size, -1).mean(dim=-1)
+            loss = gcg_loss + monitor_loss
             all_loss.append(loss)
 
             del outputs
@@ -329,7 +332,8 @@ def run(
                         N_TOKS = 0, 
                         layers = monitor.layer,
                         tok_idxs = torch.tensor(monitor.tok_idxs) - target_ids.shape[1],
-                        return_prompt_acts = False)
+                        return_prompt_acts = False,
+                        device = monitor.device)
         elif isinstance(monitor, TextMonitor):
             monitor_input = monitor.get_monitor_input(mw.tokenizer.batch_decode(optim_ids))
         
@@ -348,7 +352,7 @@ def run(
         losses.append(loss)
         monitor_losses.append(monitor_loss)
         gcg_losses.append(gcg_losses)
-        if model_preds.eq(shift_labels).all() and monitor_loss < 0.5: #* the reason this is diff is because im getting loss on the target completion but testing the probe before the target completion
+        if model_preds.eq(shift_labels).all() and monitor_loss < 0.5: 
             print("Early Stopping Condition Met")
             print(model_preds)
             print(shift_labels)

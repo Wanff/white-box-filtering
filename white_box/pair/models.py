@@ -3,10 +3,9 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from fastchat.model import get_conversation_template
 
-
-import common
-from lms import GPT, Claude, PaLM, HuggingFace
-from system_prompts import get_judge_system_prompt
+from .lms import GPT, Claude, HuggingFace
+from .system_prompts import get_judge_system_prompt
+from .utils import extract_json, conv_template
 
 from ..monitor import Monitor, ActMonitor, TextMonitor
 
@@ -16,7 +15,8 @@ ATTACK_TOP_P = 0.9
 TARGET_TOP_P = 1
 
 def load_attack_and_target_models(attack_model : str, attack_max_n_tokens : int, max_n_attack_attempts : int,
-                                 target_model : str, target_max_n_tokens : int ):
+                                 target_model : str, target_max_n_tokens : int, 
+                                 monitor : Monitor = None ):
     # Load attack model and tokenizer
     attackLM = AttackLM(model_name = attack_model, 
                         max_n_tokens = attack_max_n_tokens, 
@@ -33,7 +33,7 @@ def load_attack_and_target_models(attack_model : str, attack_max_n_tokens : int,
                         temperature = TARGET_TEMP, # init to 0
                         top_p = TARGET_TOP_P, # init to 1
                         preloaded_model = preloaded_model,
-                        
+                        monitor = monitor,
                         )
     return attackLM, targetLM
 
@@ -116,7 +116,7 @@ class AttackLM():
                 if "gpt" not in self.model_name:
                     full_output = init_message + full_output
 
-                attack_dict, json_str = common.extract_json(full_output)
+                attack_dict, json_str = extract_json(full_output)
                 
                 if attack_dict is not None:
                     valid_outputs[orig_index] = attack_dict
@@ -158,10 +158,12 @@ class TargetLM():
         else:
             self.model = preloaded_model
             _, self.template = get_model_path_and_template(model_name)
+        
+        self.monitor = monitor
 
     def get_response(self, prompts_list):
         batchsize = len(prompts_list)
-        convs_list = [common.conv_template(self.template) for _ in range(batchsize)]
+        convs_list = [conv_template(self.template) for _ in range(batchsize)]
         full_prompts = []
         for conv, prompt in zip(convs_list, prompts_list):
             conv.append_message(conv.roles[0], prompt)
@@ -285,8 +287,16 @@ class JudgeBase:
         return output
     
 class GPTJudge(JudgeBase):
-    def __init__(self, args):
-        super(GPTJudge, self).__init__(args)
+    def __init__(self, judge_model : str = "gpt-3.5-turbo",
+                 judge_max_n_tokens : int = 10,
+                judge_temperature : float = 0,
+                goal : str = "",
+                target : str = ""):
+        super(GPTJudge, self).__init__(judge_model = judge_model, 
+                                       judge_max_n_tokens = judge_max_n_tokens, 
+                                       judge_temperature=judge_temperature,
+                                       goal = goal,
+                                       target = target)
         self.judge_model = GPT(model_name = self.judge_name)
 
     def create_conv(self, full_prompt):

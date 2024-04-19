@@ -440,6 +440,7 @@ class ProbeDataset():
                        test_size = 0.2,
                        return_torch_probe : bool = True,
                        random_state : int = 0,
+                       device  = None
                         ): 
         X_train, X_val, y_train, y_val = self.act_dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = random_state)
 
@@ -451,12 +452,12 @@ class ProbeDataset():
         auc = roc_auc_score(y_val.numpy(), probe_lr.predict_proba(X_val.numpy())[:, 1])
         
         if return_torch_probe:
-            return accuracy, auc, self.convert_sk_probe_to_torch_probe(probe_lr)
+            return accuracy, auc, self.convert_sk_probe_to_torch_probe(probe_lr, device = device)
         else:
             return accuracy, auc, probe_lr
     
-    def convert_sk_probe_to_torch_probe(self, probe_lr):
-        return LRProbe.from_weights(torch.tensor(probe_lr.coef_), torch.tensor(probe_lr.intercept_))
+    def convert_sk_probe_to_torch_probe(self, probe_lr, device = None):
+        return LRProbe.from_weights(torch.tensor(probe_lr.coef_), torch.tensor(probe_lr.intercept_), device = device)
     def idxs_probe_gets_wrong(self, probe : Probe, 
                               layer : int , 
                               tok_idxs : List[int],
