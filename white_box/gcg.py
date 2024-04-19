@@ -142,7 +142,7 @@ def compute_candidates_loss(
     input_embeds: Tensor, 
     target_ids: Tensor,
     monitor : Union[ActMonitor, TextMonitor] = None,
-    input_ids: Tensor = None,
+    sampled_ids: Tensor = None,
     config : GCGConfig = None,
 ):
     """Computes the GCG loss on all candidate token id sequences.
@@ -186,8 +186,7 @@ def compute_candidates_loss(
                         tok_idxs = torch.tensor(monitor.tok_idxs) - target_ids.shape[1],
                         return_prompt_acts = False)
             elif isinstance(monitor, TextMonitor):
-                assert input_ids is not None, "TextMonitor requires input_ids"
-                monitor_input = input_ids #* assumes that textmonitor tokenizer is the same
+                monitor_input = monitor.get_monitor_input(sampled_ids)
         
             monitor_loss = monitor.get_loss(monitor_input).mean()
             del monitor_input
@@ -261,7 +260,10 @@ def run(
     before_str, after_str = template.split("{optim_str}")
     target = " " + target if config.add_space_before_target else target
     print(f"before, after, target : {before_str} | {after_str} | {target}")
-
+    
+    if monitor is not None and isinstance(monitor, TextMonitor):
+        monitor.set_before_after_str(before_str, after_str)
+        
     # Tokenize everything that doesn't get optimized
     before_ids = mw.tokenizer([before_str], padding=False)["input_ids"]
     after_ids = mw.tokenizer([after_str], add_special_tokens=False)["input_ids"]
@@ -328,7 +330,7 @@ def run(
                         tok_idxs = torch.tensor(monitor.tok_idxs) - target_ids.shape[1],
                         return_prompt_acts = False)
         elif isinstance(monitor, TextMonitor):
-            monitor_input =  mw.tokenizer.batch_decode(before_ids ) + mw.tokenizer.batch_decode(optim_ids) + mw.tokenizer.batch_decode(after_ids) #! fix
+            monitor_input = monitor.get_monitor_input(mw.tokenizer.batch_decode(optim_ids))
         
         monitor_loss = monitor.get_loss(monitor_input).mean() #? not sure if this is the right way to do it 
         del monitor_input
@@ -391,6 +393,7 @@ def run(
             target_ids,
             monitor,
             config = config,
+            sampled_ids = sampled_ids,
         )
 
         current_loss = loss.min().item()
