@@ -188,7 +188,7 @@ def compute_candidates_loss(
             elif isinstance(monitor, TextMonitor):
                 monitor_input = monitor.get_monitor_input(sampled_ids)
         
-            monitor_loss = monitor.get_loss(monitor_input).mean(dim = -1)
+            monitor_loss = monitor.get_loss(monitor_input)
             
             del monitor_input
             clear_gpus()
@@ -337,31 +337,29 @@ def run(
         elif isinstance(monitor, TextMonitor):
             monitor_input = monitor.get_monitor_input(mw.tokenizer.batch_decode(optim_ids))
         
-        monitor_loss = monitor.get_loss(monitor_input).mean() #? not sure if this is the right way to do it 
+        monitor_loss = monitor.get_loss(monitor_input)
         del monitor_input
         clear_gpus()
         
         gcg_loss = torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
         
         model_preds = torch.argmax(shift_logits, dim=-1)
-        print(f"model preds : {mw.tokenizer.decode(model_preds.squeeze(0))}")
-        print(f"monitor_loss : {monitor_loss} | gcg_loss : {gcg_loss} | search_width : {search_width_sched(buffer.n_repeat)} | n_replace : {n_replace_sched(i)}")
-        
         loss = config.gcg_loss_weight * gcg_loss + config.monitor_loss_weight * monitor_loss
+        
+        print(f"model preds : {mw.tokenizer.decode(model_preds.squeeze(0))}")
+        print(f"monitor_loss : {monitor_loss} | gcg_loss : {gcg_loss} |  loss : {loss} | search_width : {search_width_sched(buffer.n_repeat)} | n_replace : {n_replace_sched(i)}")
         
         losses.append(loss)
         monitor_losses.append(monitor_loss)
         gcg_losses.append(gcg_losses)
         if model_preds.eq(shift_labels).all() and monitor_loss < 0.5: 
             print("Early Stopping Condition Met")
-            print(model_preds)
-            print(shift_labels)
-            return {
-                "losses": losses,
-                "monitor_losses": monitor_losses,
-                "gcg_losses" : gcg_losses, 
-                "optim_strings": optim_strings,
-            }
+            # return {
+            #     "losses": losses,
+            #     "monitor_losses": monitor_losses,
+            #     "gcg_losses" : gcg_losses, 
+            #     "optim_strings": optim_strings,
+            # }
             
         optim_ids_onehot_grad = torch.autograd.grad(outputs=[loss], inputs=[optim_ids_onehot])[0]
 
@@ -393,7 +391,7 @@ def run(
         ], dim=1)
 
         # Compute loss on all candidate sequences 
-        loss = find_executable_batch_size(compute_candidates_loss, new_search_width)(
+        loss = find_executable_batch_size(compute_candidates_loss, new_search_width // 2)(
             mw.model,
             kv_cache,
             input_embeds,
@@ -421,7 +419,7 @@ def run(
         optim_str = mw.tokenizer.batch_decode(buffer.get_best_ids())        
         optim_strings.append(optim_str)
 
-        print(f"step: {i} | optim_str: {optim_str} | loss: {buffer.get_lowest_loss()}")
+        print(f"step: {i} | optim_str: {optim_str} | lowest loss after sample_id: {buffer.get_lowest_loss()}")
     
     return {
         "losses": losses,

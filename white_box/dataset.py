@@ -458,16 +458,22 @@ class ProbeDataset():
     
     def convert_sk_probe_to_torch_probe(self, probe_lr, device = None):
         return LRProbe.from_weights(torch.tensor(probe_lr.coef_), torch.tensor(probe_lr.intercept_), device = device)
+    
+    # def eval_probe_on_val(self, probe: Probe):
+        # assert self.act_dataset.metadata_test_idxs is not None, "train_test_split needs to already have been called"
+
     def idxs_probe_gets_wrong(self, probe : Probe, 
                               layer : int , 
                               tok_idxs : List[int],
                               pred_method : str = "mean",
-                              thresh : float = 0.5):
+                              thresh : float = 0.5,
+                              ):
         assert self.act_dataset.metadata_test_idxs is not None, "train_test_split needs to already have been called"
         val_idxs = self.act_dataset.test_idxs
         val_labels = self.act_dataset.y[val_idxs]
 
-        probas = probe.predict_proba(self.act_dataset.X[val_idxs][:, layer, tok_idxs]).cpu().detach()
+        normed_acts = (self.act_dataset.X[val_idxs][:, layer, tok_idxs] - self.act_dataset.X[val_idxs][:, layer, tok_idxs].mean(dim = 0)) / self.act_dataset.X[val_idxs][:, layer, tok_idxs].std(dim = 0)
+        probas = probe.predict_proba(normed_acts).cpu().detach()
         if pred_method == "mean":
             preds = (probas.mean(dim = 1) > thresh)
         elif pred_method == "any":

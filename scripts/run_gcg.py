@@ -53,7 +53,7 @@ def parse_args():
                     help = "")
     parser.add_argument("--use_search_width_sched", action="store_true",
                     help = "")
-    parser.add_argument("--seed", type = int, default = 0)
+    parser.add_argument("--seed", type = int, default = None)
     
     # Monitor Args
     parser.add_argument('--monitor_type', type = str, help = "can be act, act_rand or text")
@@ -73,8 +73,9 @@ if __name__=="__main__":
     args = parse_args()
     print(args)
 
-    torch.manual_seed(args.seed)
-    np.random.seed(args.seed)
+    if args.seed is not None:
+        torch.manual_seed(args.seed)
+        np.random.seed(args.seed)
     
     model_config = MODEL_CONFIGS[args.model_name]
     model, tokenizer = load_model_and_tokenizer(**model_config)
@@ -95,7 +96,14 @@ if __name__=="__main__":
         print(acc, auc)
         
         if args.monitor_type == "act_rand":
+            trained_probe = probe
+            
             probe  = LRProbe.from_weights(torch.rand_like(probe.net[0].weight.data), torch.rand_like(probe.net[0].bias.data), device = mw.model.device) #random probe
+            print(probe.net[0].weight.data)
+            print("Acc of Random Probe")
+            print(probe_dataset.idxs_probe_gets_wrong(probe, layer, tok_idxs = list(range(5))))
+            print(f"Cosine Similarity of Random Probe to Learned Probe: {torch.nn.functional.cosine_similarity(probe.net[0].weight.data, trained_probe.net[0].weight.data)}")
+            
 
         monitor = ActMonitor(probe = probe, layer = layer, tok_idxs = [-1, -2, -3, -4, -5], device = mw.model.device)
     elif args.monitor_type == "text":
@@ -113,7 +121,8 @@ if __name__=="__main__":
     
     advbench_behaviors = pd.read_csv("../data/harmful_behaviors_custom.csv")
     results = []
-    for i, row in list(advbench_behaviors.iterrows()):
+    for i, row in list(advbench_behaviors.iterrows())[:19]:
+        
         gcg_config = GCGConfig(num_steps = args.num_steps, 
                                search_width = args.search_width, 
                                n_replace = args.n_replace, 
@@ -124,7 +133,14 @@ if __name__=="__main__":
         print(row['goal'])
         print(row['target'])
         
-        attack_res = run(mw, messages = row['goal'], target = row['target'], monitor = monitor, config = gcg_config)
+        success = False
+        while not success:
+            try:
+                attack_res = run(mw, messages = row['goal'], target = row['target'], monitor = monitor, config = gcg_config)
+                success = True
+            except Exception as e:
+                print(f"Failed bc of {e}")
+            
         results.append(attack_res)
 
     with open(args.save_path, 'a') as f:
