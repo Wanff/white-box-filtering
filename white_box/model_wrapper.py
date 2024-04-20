@@ -396,7 +396,7 @@ class ModelWrapper(torch.nn.Module):
         if isinstance(layers, int):
             layers = [layers]
             
-        @find_executable_batch_size(starting_batch_size=len(prompts) )
+        @find_executable_batch_size(starting_batch_size=len(prompts) // 8 )
         def inner_loop(batch_size):
             nonlocal prompts, layers, tok_idxs, return_types, logging, kwargs
             hidden_states_dict = defaultdict(list)
@@ -435,7 +435,7 @@ class ModelWrapper(torch.nn.Module):
                 #     print()
                 
             for act_type in hidden_states_dict:
-                hidden_states_dict[act_type] = torch.cat(hidden_states_dict[act_type]).reshape(len(prompts), len(layers), len(tok_idxs), -1)
+                hidden_states_dict[act_type] = torch.cat(hidden_states_dict[act_type], dim = 1).transpose(0, 1)
             return hidden_states_dict
         return inner_loop()
                                
