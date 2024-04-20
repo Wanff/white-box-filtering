@@ -82,4 +82,7 @@ class ActMonitor():
         return self.probe.predict_proba(acts)
 
     def get_loss(self, acts : torch.tensor):
-        return self.predict_proba(acts)
+        if len(self.tok_idxs) > 1:
+            return self.predict_proba(acts).mean(dim = -1)
+        else:
+            return self.predict_proba(acts)
