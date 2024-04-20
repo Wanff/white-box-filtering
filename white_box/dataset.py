@@ -440,6 +440,7 @@ class ProbeDataset():
                        test_size = 0.2,
                        return_torch_probe : bool = True,
                        random_state : int = 0,
+                       device  = None
                         ): 
         X_train, X_val, y_train, y_val = self.act_dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = random_state)
 
@@ -451,22 +452,28 @@ class ProbeDataset():
         auc = roc_auc_score(y_val.numpy(), probe_lr.predict_proba(X_val.numpy())[:, 1])
         
         if return_torch_probe:
-            return accuracy, auc, self.convert_sk_probe_to_torch_probe(probe_lr)
+            return accuracy, auc, self.convert_sk_probe_to_torch_probe(probe_lr, device = device)
         else:
             return accuracy, auc, probe_lr
     
-    def convert_sk_probe_to_torch_probe(self, probe_lr):
-        return LRProbe.from_weights(torch.tensor(probe_lr.coef_), torch.tensor(probe_lr.intercept_))
+    def convert_sk_probe_to_torch_probe(self, probe_lr, device = None):
+        return LRProbe.from_weights(torch.tensor(probe_lr.coef_), torch.tensor(probe_lr.intercept_), device = device)
+    
+    # def eval_probe_on_val(self, probe: Probe):
+        # assert self.act_dataset.metadata_test_idxs is not None, "train_test_split needs to already have been called"
+
     def idxs_probe_gets_wrong(self, probe : Probe, 
                               layer : int , 
                               tok_idxs : List[int],
                               pred_method : str = "mean",
-                              thresh : float = 0.5):
+                              thresh : float = 0.5,
+                              ):
         assert self.act_dataset.metadata_test_idxs is not None, "train_test_split needs to already have been called"
         val_idxs = self.act_dataset.test_idxs
         val_labels = self.act_dataset.y[val_idxs]
 
-        probas = probe.predict_proba(self.act_dataset.X[val_idxs][:, layer, tok_idxs]).cpu().detach()
+        normed_acts = (self.act_dataset.X[val_idxs][:, layer, tok_idxs] - self.act_dataset.X[val_idxs][:, layer, tok_idxs].mean(dim = 0)) / self.act_dataset.X[val_idxs][:, layer, tok_idxs].std(dim = 0)
+        probas = probe.predict_proba(normed_acts).cpu().detach()
         if pred_method == "mean":
             preds = (probas.mean(dim = 1) > thresh)
         elif pred_method == "any":

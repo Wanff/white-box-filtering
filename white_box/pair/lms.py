@@ -1,13 +1,20 @@
 import openai
 import anthropic
 import os
+from dotenv import load_dotenv
+import copy
 import time
 import torch
 import gc
 from typing import Dict, List
+load_dotenv()
+
 
 from ..monitor import Monitor, ActMonitor, TextMonitor
 from ..model_wrapper import slice_acts
+
+def convert_to_rating(num : torch.Tensor):
+    return 1 + int(num * 9)
 
 class LanguageModel():
     def __init__(self, model_name):
@@ -49,7 +56,6 @@ class HuggingFace(LanguageModel):
                 #actmonitor things
                 output_hidden_states = output_hidden_states,
                 return_dict_in_generate = output_hidden_states
-                
             )
         else:
             out = self.model.generate(
@@ -89,15 +95,13 @@ class HuggingFace(LanguageModel):
                         layers = monitor.layer,
                         tok_idxs = monitor.tok_idxs,
                         return_prompt_acts = False)
-            monitor_loss = monitor.predict(monitor_input).mean().item()
+            monitor_loss = monitor.get_loss(monitor_input).mean().item()
             
             #TODO: outputs_list needs to be modified to take into account monitor_out
+            monitor_outputs = copy.deepcopy(outputs_list)
             for i, out in enumerate(outputs_list):
-                if out[i] == 1:
-                    outputs_list[i] += " [Monitor Output] : Detected Harmful Content"
-                else:
-                    outputs_list[i] += " [Monitor Output] : Did Not Detect Harmful Content"
-            return outputs_list
+                    monitor_outputs[i] += f"\n\n[MONITOR OUTPUT: {convert_to_rating(monitor_loss)}]"
+            return outputs_list, monitor_outputs
         elif isinstance(monitor, TextMonitor):
             raise NotImplementedError
         else:
