@@ -66,7 +66,7 @@ def parse_args():
 def get_mw(args): 
     if args.model_name in MODEL_CONFIGS: # for chat_models
         model_config = MODEL_CONFIGS[args.model_name]
-        model, tokenizer = load_model_and_tokenizer(**model_config)
+        model, tokenizer = load_model_and_tokenizer(**model_config, device=args.device)
     elif args.model_name in LORA_MODELS: 
         assert args.device == 'cuda', "LoRA models only work on cuda"
         config = PeftConfig.from_pretrained(args.model_name)
@@ -82,12 +82,9 @@ def get_mw(args):
     else: 
         model = AutoModelForCausalLM.from_pretrained(args.model_name, torch_dtype=torch.float16, device_map="auto").eval()
         tokenizer = AutoTokenizer.from_pretrained(args.model_name, padding_side="left")
-        assert args.use_simple, "Only simple chat is supported for non-chat models"
+        raise Exception("Template not set for chat models yet")
     
-    if args.use_simple: 
-        template = '{instruction}\n\nAnswer: '
-    else: 
-        template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))['prompt']
+    template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))['prompt']
     mw = ModelWrapper(model, tokenizer, template = template)
     return mw
 

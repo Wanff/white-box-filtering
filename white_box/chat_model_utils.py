@@ -18,7 +18,7 @@ MODEL_CONFIGS = {
     "llama2_7b" : {
         "model_name_or_path": "meta-llama/Llama-2-7b-chat-hf",  
         "use_fast_tokenizer": False,
-        "chat_template" :"llama-2"
+        "chat_template" :"llama-2",
     },
     "llama2_13b" : {
         "model_name_or_path": "meta-llama/Llama-2-13b-chat-hf",  
@@ -73,8 +73,8 @@ LLAMA2_DEFAULT_SYSTEM_PROMPT = """You are a helpful, respectful and honest assis
 If a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information."""
 LLAMA2_CHAT_PROMPT = {
     "description": "Template used by Llama2 Chat",
-    # "prompt": "[INST] {instruction} [/INST] "
-    "prompt": "[INST] <<SYS>>\n"+LLAMA2_DEFAULT_SYSTEM_PROMPT+"\n<</SYS>>\n\n{instruction} [/INST] "
+    "prompt": "[INST] {instruction} [/INST] "
+    # "prompt": "[INST] <<SYS>>\n"+LLAMA2_DEFAULT_SYSTEM_PROMPT+"\n<</SYS>>\n\n{instruction} [/INST] "
 }
 
 INTERNLM_PROMPT = { # https://github.com/InternLM/InternLM/blob/main/tools/alpaca_tokenizer.py
@@ -265,6 +265,7 @@ def load_model_and_tokenizer(
     model_name_or_path,
     dtype='auto',
     device_map='auto',
+    device=None,
     trust_remote_code=False,
     revision=None,
     token=None,
@@ -285,9 +286,12 @@ def load_model_and_tokenizer(
     if token:
         hf_login(token=token)
     
+    if device == 'cpu': 
+        device_map = None
+    
     model = AutoModelForCausalLM.from_pretrained(model_name_or_path, 
-        torch_dtype=_STR_DTYPE_TO_TORCH_DTYPE[dtype], 
         device_map=device_map, 
+        torch_dtype=_STR_DTYPE_TO_TORCH_DTYPE[dtype], 
         trust_remote_code=trust_remote_code, 
         revision=revision, 
         **model_kwargs).eval()
@@ -306,7 +310,7 @@ def load_model_and_tokenizer(
         tokenizer.eos_token = eos_token
 
     if tokenizer.pad_token is None or tokenizer.pad_token_id is None:
-        print("Tokenizer.pad_token is None, setting to tokenizer.unk_token")
+        print("Tokenizer.pad_token is None, setting to tokenizer.eos_token")
         tokenizer.pad_token = tokenizer.eos_token
         print("tokenizer.pad_token", tokenizer.pad_token)
     
