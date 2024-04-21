@@ -16,7 +16,7 @@ from white_box.monitor import Monitor, ActMonitor, TextMonitor
 @dataclass
 class GCGConfig:
     num_steps: int = 75
-    optim_str_init: str = "! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! "
+    optim_str_init: str = "! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !"
     search_width: int = 512
     topk: int = 256
     n_replace: int = 1
@@ -63,8 +63,8 @@ class AttackBuffer:
 
 
 def clear_gpus():
-    torch.cuda.empty_cache()
     gc.collect()
+    torch.cuda.empty_cache()
     
 def sample_ids_from_grad(
     ids: Tensor, 
@@ -178,20 +178,24 @@ def compute_candidates_loss(
             shift_logits = logits[..., shift-1:-1, :].contiguous()
             shift_labels = target_ids.repeat(current_batch_size, 1)
 
-            if isinstance(monitor, ActMonitor):
-                monitor_input = slice_acts(outputs, 
-                        N_TOKS = 0, 
-                        layers = monitor.layer,
-                        tok_idxs = torch.tensor(monitor.tok_idxs) - target_ids.shape[1],
-                        return_prompt_acts = False,
-                        device = monitor.device)
-            elif isinstance(monitor, TextMonitor):
-                monitor_input = monitor.get_monitor_input(sampled_ids)
-        
-            monitor_loss = monitor.get_loss(monitor_input)
+            if monitor is not None:
+                if isinstance(monitor, ActMonitor):
+                    monitor_input = slice_acts(outputs, 
+                            N_TOKS = 0, 
+                            layers = monitor.layer,
+                            tok_idxs = torch.tensor(monitor.tok_idxs) - target_ids.shape[1],
+                            return_prompt_acts = False,
+                            device = monitor.device)
+                elif isinstance(monitor, TextMonitor):
+                    monitor_input = monitor.get_monitor_input(sampled_ids)
             
-            del monitor_input
-            clear_gpus()
+                monitor_loss = monitor.get_loss(monitor_input)
+                
+                del monitor_input
+                clear_gpus()
+            else:
+                monitor_loss = torch.tensor(0)
+                
             gcg_loss = config.gcg_loss_weight * torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1), reduction="none") 
             gcg_loss = gcg_loss.view(current_batch_size, -1).mean(dim=-1)
             monitor_loss =  config.monitor_loss_weight * monitor_loss
@@ -307,6 +311,7 @@ def run(
     losses = []
     monitor_losses = []
     gcg_losses = []
+    early_stopping_condition = []
     optim_strings = []
     for i in range(config.num_steps):
         optim_ids = buffer.get_best_ids()
@@ -326,20 +331,27 @@ def run(
         shift = input_embeds.shape[1] - target_ids.shape[1]
         shift_logits = logits[..., shift-1:-1, :].contiguous() # (1, num_target_ids, vocab_size)
         shift_labels = target_ids
-            
-        if isinstance(monitor, ActMonitor):
-            monitor_input = slice_acts(output, 
-                        N_TOKS = 0, 
-                        layers = monitor.layer,
-                        tok_idxs = torch.tensor(monitor.tok_idxs) - target_ids.shape[1],
-                        return_prompt_acts = False,
-                        device = monitor.device)
-        elif isinstance(monitor, TextMonitor):
-            monitor_input = monitor.get_monitor_input(mw.tokenizer.batch_decode(optim_ids))
         
-        monitor_loss = monitor.get_loss(monitor_input)
-        del monitor_input
-        clear_gpus()
+        if monitor is not None:
+            if isinstance(monitor, ActMonitor):
+                monitor_input = slice_acts(output, 
+                            N_TOKS = 0, 
+                            layers = monitor.layer,
+                            tok_idxs = torch.tensor(monitor.tok_idxs) - target_ids.shape[1],
+                            return_prompt_acts = False,
+                            device = monitor.device)
+            elif isinstance(monitor, TextMonitor):
+                monitor_input = monitor.get_monitor_input(mw.tokenizer.batch_decode(optim_ids))
+            
+            monitor_loss = monitor.get_loss(monitor_input)
+            del monitor_input
+            del output
+            clear_gpus()
+        else:
+            monitor_loss = torch.tensor(0)
+            
+            del output 
+            clear_gpus()
         
         gcg_loss = torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
         
@@ -349,18 +361,32 @@ def run(
         print(f"model preds : {mw.tokenizer.decode(model_preds.squeeze(0))}")
         print(f"monitor_loss : {monitor_loss.item()} | gcg_loss : {gcg_loss} |  loss : {loss.item()} | search_width : {search_width_sched(buffer.n_repeat)} | n_replace : {n_replace_sched(i)}")
         
-        losses.append(loss)
-        monitor_losses.append(monitor_loss)
-        gcg_losses.append(gcg_losses)
-        if model_preds.eq(shift_labels).all() and monitor_loss < 0.5: 
-            print("Early Stopping Condition Met")
-            # return {
-            #     "losses": losses,
-            #     "monitor_losses": monitor_losses,
-            #     "gcg_losses" : gcg_losses, 
-            #     "optim_strings": optim_strings,
-            # }
-            
+        losses.append(loss.item())
+        monitor_losses.append(monitor_loss.item())
+        gcg_losses.append(gcg_loss.item())
+        
+        gcg_condition = model_preds.eq(shift_labels).all() 
+        monitor_condition = (monitor_loss < 0.5) 
+        
+        if config.gcg_loss_weight == 0:
+            if monitor_condition:
+                print("Early Stopping Condition Met")
+                early_stopping_condition.append(1)
+            else:
+                early_stopping_condition.append(0)
+        elif config.monitor_loss_weight == 0:
+            if gcg_condition:
+                print("Early Stopping Condition Met")
+                early_stopping_condition.append(1)
+            else:
+                early_stopping_condition.append(0)
+        elif config.monitor_loss_weight > 0 and config.gcg_loss_weight > 0:
+            if gcg_condition and monitor_condition:
+                print("Early Stopping Condition Met")
+                early_stopping_condition.append(1)
+            else:
+                early_stopping_condition.append(0)
+  
         optim_ids_onehot_grad = torch.autograd.grad(outputs=[loss], inputs=[optim_ids_onehot])[0]
 
         # Sample candidate token sequences
@@ -426,5 +452,6 @@ def run(
         "monitor_losses": monitor_losses,
         "gcg_losses" : gcg_losses, 
         "optim_strings": optim_strings,
+        "early_stopping" : early_stopping_condition,
     }
             

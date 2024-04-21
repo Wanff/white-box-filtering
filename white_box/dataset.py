@@ -212,7 +212,7 @@ class ActDataset:
          
         return self.X, self.y
     
-    def convert_states(self, states : torch.tensor, labels : torch.tensor, tok_idxs : List[int] = None, layer : int = None):
+    def convert_states(self, states : torch.Tensor, labels : torch.Tensor, tok_idxs : List[int] = None, layer : int = None):
             if tok_idxs is not None:
                 labels = labels.view(-1, 1).expand(-1, len(tok_idxs)).flatten()
                 if layer is not None:
@@ -397,7 +397,7 @@ class ProbeDataset():
         
         return np.array(probe_accs).T, np.array(probe_aucs).T, probes
 
-    def train_probe(self, layer : int, tok_idxs : List[int],
+    def train_torch_probe(self, layer : int, tok_idxs : List[int],
                     lr : float = 0.01,
                     weight_decay : float = 1,
                     epochs : int = 500,
@@ -440,9 +440,15 @@ class ProbeDataset():
                        test_size = 0.2,
                        return_torch_probe : bool = True,
                        random_state : int = 0,
-                       device  = None
+                       device  = None,
+                       use_train_test_split : bool = True
                         ): 
-        X_train, X_val, y_train, y_val = self.act_dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = random_state)
+        if use_train_test_split:
+            X_train, X_val, y_train, y_val = self.act_dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = random_state)
+        else:
+            y_train, X_train = self.act_dataset.convert_states(self.act_dataset.X, self.act_dataset.y, tok_idxs = tok_idxs, layer = layer)
+            X_val, y_val = X_train, y_train
+        
 
         probe_lr = LogisticRegression(max_iter = max_iter, C = C)
         probe_lr.fit(X_train.numpy(), y_train.numpy())

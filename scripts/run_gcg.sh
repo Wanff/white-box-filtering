@@ -8,7 +8,6 @@
 
 SAVE_PATH="../data/llama2_7b"
 FILE_SPEC="gcg_run_llama_guard"
-# FILE_SPEC="gcg_run_lyr24_final"
 
 # python run_gcg.py \
 #     --model_name "llama2_7b" \
