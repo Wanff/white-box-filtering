@@ -16,7 +16,7 @@ from white_box.monitor import Monitor, ActMonitor, TextMonitor
 @dataclass
 class GCGConfig:
     num_steps: int = 75
-    optim_str_init: str = "! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !"
+    optim_str_init: str = "! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! "
     search_width: int = 512
     topk: int = 256
     n_replace: int = 1
@@ -194,7 +194,7 @@ def compute_candidates_loss(
             clear_gpus()
             gcg_loss = config.gcg_loss_weight * torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1), reduction="none") 
             gcg_loss = gcg_loss.view(current_batch_size, -1).mean(dim=-1)
-            monitor_loss = + config.monitor_loss_weight * monitor_loss
+            monitor_loss =  config.monitor_loss_weight * monitor_loss
             
             loss = gcg_loss + monitor_loss
             all_loss.append(loss)
@@ -347,7 +347,7 @@ def run(
         loss = config.gcg_loss_weight * gcg_loss + config.monitor_loss_weight * monitor_loss
         
         print(f"model preds : {mw.tokenizer.decode(model_preds.squeeze(0))}")
-        print(f"monitor_loss : {monitor_loss} | gcg_loss : {gcg_loss} |  loss : {loss} | search_width : {search_width_sched(buffer.n_repeat)} | n_replace : {n_replace_sched(i)}")
+        print(f"monitor_loss : {monitor_loss.item()} | gcg_loss : {gcg_loss} |  loss : {loss.item()} | search_width : {search_width_sched(buffer.n_repeat)} | n_replace : {n_replace_sched(i)}")
         
         losses.append(loss)
         monitor_losses.append(monitor_loss)
@@ -391,7 +391,7 @@ def run(
         ], dim=1)
 
         # Compute loss on all candidate sequences 
-        loss = find_executable_batch_size(compute_candidates_loss, new_search_width // 2)(
+        loss = find_executable_batch_size(compute_candidates_loss, new_search_width)(
             mw.model,
             kv_cache,
             input_embeds,

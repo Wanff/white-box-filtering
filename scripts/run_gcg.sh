@@ -2,7 +2,7 @@
 
 #SBATCH --nodes=1
 #SBATCH --gpus-per-node=1
-#SBATCH --time=1:00:00
+#SBATCH --time=30:00:00
 #SBATCH --job-name=LLaMaGuardGCG
 #SBATCH --output=LLaMaGuardGCG.out
 
@@ -23,4 +23,5 @@ python run_gcg.py \
     --model_name "llama2_7b" \
     --save_path "$SAVE_PATH" \
     --monitor_type "text" \
-    --file_spec "$FILE_SPEC"
+    --file_spec "$FILE_SPEC" \
+    --seed 0 \

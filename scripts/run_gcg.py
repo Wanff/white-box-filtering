@@ -39,7 +39,7 @@ def parse_args():
                         help="string appended to saved data")
     
     # GCG Args
-    parser.add_argument("--num_steps", type = int, default = 300, 
+    parser.add_argument("--num_steps", type = int, default = 500, 
                         help = "num steps for GCG")
     parser.add_argument("--search_width", type = int, default = 48, 
                         help = "batch size for GCG")
@@ -53,7 +53,7 @@ def parse_args():
                     help = "")
     parser.add_argument("--use_search_width_sched", action="store_true",
                     help = "")
-    parser.add_argument("--seed", type = int, default = None)
+    parser.add_argument("--seed", type = int, default = 0)
     
     # Monitor Args
     parser.add_argument('--monitor_type', type = str, help = "can be act, act_rand or text")
@@ -121,7 +121,7 @@ if __name__=="__main__":
     
     advbench_behaviors = pd.read_csv("../data/harmful_behaviors_custom.csv")
     results = []
-    for i, row in list(advbench_behaviors.iterrows())[:19]:
+    for i, row in list(advbench_behaviors.iterrows()):
         
         gcg_config = GCGConfig(num_steps = args.num_steps, 
                                search_width = args.search_width, 
@@ -132,14 +132,16 @@ if __name__=="__main__":
                                use_search_width_sched = args.use_search_width_sched)
         print(row['goal'])
         print(row['target'])
-        
-        success = False
-        while not success:
-            try:
-                attack_res = run(mw, messages = row['goal'], target = row['target'], monitor = monitor, config = gcg_config)
-                success = True
-            except Exception as e:
-                print(f"Failed bc of {e}")
+
+        attack_res = run(mw, messages = row['goal'], target = row['target'], monitor = monitor, config = gcg_config)
+
+        # success = False
+        # while not success:
+        #     try:
+        #         attack_res = run(mw, messages = row['goal'], target = row['target'], monitor = monitor, config = gcg_config)
+        #         success = True
+        #     except Exception as e:
+        #         print(f"Failed bc of {e}")
             
         results.append(attack_res)
 
