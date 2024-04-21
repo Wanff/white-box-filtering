@@ -56,7 +56,7 @@ def parse_args():
     parser.add_argument("--seed", type = int, default = None)
     
     # Monitor Args
-    parser.add_argument('--monitor_type', type = str, help = "can be act, act_rand or text")
+    parser.add_argument('--monitor_type', type = str, help = "can be act, act_rand, text, or none")
     parser.add_argument("--probe_layer", type = int, default = 24,
                         help="string appended to saved acts")
     parser.add_argument("--probe_data_path", type = str, default = "jb_",
@@ -121,7 +121,7 @@ if __name__=="__main__":
     
     advbench_behaviors = pd.read_csv("../data/harmful_behaviors_custom.csv")
     results = []
-    for i, row in list(advbench_behaviors.iterrows())[:19]:
+    for i, row in list(advbench_behaviors.iterrows())[18:]:
         
         gcg_config = GCGConfig(num_steps = args.num_steps, 
                                search_width = args.search_width, 
@@ -133,17 +133,11 @@ if __name__=="__main__":
         print(row['goal'])
         print(row['target'])
         
-        success = False
-        while not success:
-            try:
-                attack_res = run(mw, messages = row['goal'], target = row['target'], monitor = monitor, config = gcg_config)
-                success = True
-            except Exception as e:
-                print(f"Failed bc of {e}")
-            
+
+        attack_res = run(mw, messages = row['goal'], target = row['target'], monitor = monitor, config = gcg_config)
         results.append(attack_res)
 
-    with open(args.save_path, 'a') as f:
+    with open(args.save_path + f"/{args.file_spec}.json", 'a') as f:
         for res in results:
             f.write(json.dumps(res) + '\n')
 

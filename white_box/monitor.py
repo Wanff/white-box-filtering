@@ -51,7 +51,7 @@ class TextMonitor(Monitor):
             for prompt in prompts:
                 probas.append(self._predict_proba(prompt))
 
-            return torch.tensor(probas)
+            return torch.tensor(probas, device = self.model.device)
     
     def get_loss(self, prompt : str):
         return self.predict_proba(prompt)
