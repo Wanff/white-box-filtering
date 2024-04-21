@@ -25,13 +25,13 @@
 #     --tok_idxs -1 -2 -3 -4 -5  \
 #     --file_spec "jb_" &> ../data/llama2_7b/jb.out &
 
-python get_activations.py \
-    --model_name "llama2_7b" \
-    --dataset_name_or_path "../data/llama2_7b/jb_eq_by_cat_metadata.csv" \
-    --save_path "../data/llama2_7b/" \
-    --tok_idxs -1 -2 -3 -4 -5  \
-    --file_spec "jb_eq_by_cat_" &> ../data/llama2_7b/jb_eq_by_cat.out &
-
+# python get_activations.py \
+#     --model_name "llama2_7b" \
+#     --dataset_name_or_path "../data/llama2_7b/jb_metadata.csv" \
+#     --save_path "../data/llama2_7b/" \
+#     --tok_idxs -1 -2 -3 -4 -5  \
+#     --file_spec "jb_" &> ../data/llama2_7b/jb.out &
+    
 # python get_activations.py \
 #     --model_name "llama2_7b" \
 #     --dataset_name_or_path "../data/llama2_7b/jb_eq_by_jbname_metadata.csv" \
@@ -47,9 +47,16 @@ python get_activations.py \
 #     --device "cuda" \
 #     --file_spec "harmful_behaviors_custom_"
 
-# python get_activations.py \
+# python get_activations.py dd\
 #     --model_name "akdeniz27/llama-2-7b-hf-qlora-dolly15k-turkish" \
 #     --dataset_name_or_path "/home/ubuntu/rowan/white-box-filtering/data/llama2_7b/jb_unif_behav_metadata.csv" \
 #     --save_path "/home/ubuntu/rowan/white-box-filtering/data/turkish/" \
 #     --tok_idxs -1 -2 -3 -4 -5  \
 #     --file_spec "jb_unif_behav_"
+
+python get_activations.py \
+    --model_name "llama2_7b" \
+    --dataset_name_or_path "/home/ubuntu/rowan/white-box-filtering/data/llama2_7b/harmbench_dolly_metadata.csv" \
+    --save_path "/home/ubuntu/rowan/white-box-filtering/data/llama2_7b/" \
+    --tok_idxs -1 -2 -3 -4 -5  \
+    --file_spec "harmbench_dolly_"
