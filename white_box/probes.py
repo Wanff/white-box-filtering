@@ -16,20 +16,15 @@ class Probe:
     def predict_proba(self, x):
         raise NotImplementedError
 
-    def get_probe_accuracy(self, X_test, y_test, device = "cpu"):
-        if device != "cpu":
-            X_test = X_test.to(device)
-            y_test = y_test.to(device)
+    def get_probe_accuracy(self, X_test, y_test):
         preds = self.predict(X_test)
 
         accuracy = (preds == y_test).float().mean().item()
         return accuracy
 
-    def get_probe_auc(self, X_test, y_test, device = "cpu"):
-        if device != "cpu":
-            X_test = X_test.to(device)
-            y_test = y_test.to(device)
+    def get_probe_auc(self, X_test, y_test):
         preds = self.predict_proba(X_test)
+        
         auc = roc_auc_score(y_test.detach().cpu().numpy(), preds.detach().cpu().numpy())
         return auc
 
@@ -129,7 +124,7 @@ class LRProbe(t.nn.Module, Probe):
         return self.net(x).squeeze(-1)
 
     def predict(self, x, iid=None):
-        return self(x).round()
+        return self.predict_proba(x).round()
     
     def predict_proba(self, x, iid=None):
         if x.dtype != t.float32:
