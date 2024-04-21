@@ -19,6 +19,8 @@ MODEL_CONFIGS = {
         "model_name_or_path": "meta-llama/Llama-2-7b-chat-hf",  
         "use_fast_tokenizer": False,
         "chat_template" :"llama-2",
+        "dtype" : "float16",
+        "device_map" : "auto"
     },
     "llama2_13b" : {
         "model_name_or_path": "meta-llama/Llama-2-13b-chat-hf",  

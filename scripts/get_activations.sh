@@ -56,7 +56,7 @@
 
 python get_activations.py \
     --model_name "llama2_7b" \
-    --dataset_name_or_path "/home/ubuntu/rowan/white-box-filtering/data/llama2_7b/harmbench_dolly_metadata.csv" \
+    --dataset_name_or_path "/home/ubuntu/rowan/white-box-filtering/data/harmbench_alpaca.csv" \
     --save_path "/home/ubuntu/rowan/white-box-filtering/data/llama2_7b/" \
     --tok_idxs -1 -2 -3 -4 -5  \
-    --file_spec "harmbench_dolly_"
+    --file_spec "harmbench_alpaca_"
