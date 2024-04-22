@@ -19,7 +19,7 @@ class Probe:
     def get_probe_accuracy(self, X_test, y_test):
         preds = self.predict(X_test)
 
-        accuracy = (preds == y_test).float().mean().item()
+        accuracy = (preds.detach().cpu() == y_test.detach().cpu()).float().mean().item()
         return accuracy
 
     def get_probe_auc(self, X_test, y_test):
@@ -131,7 +131,7 @@ class LRProbe(t.nn.Module, Probe):
             x = x.float()
         
         if x.device != self.net[0].weight.data.device:
-            print("Moving data to device")
+            # print("Moving data to device")
             x = x.to(self.net[0].weight.data.device)
             
         return self(x)

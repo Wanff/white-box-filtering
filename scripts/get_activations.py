@@ -485,7 +485,7 @@ def main():
                                             return_types = args.act_types,
                                             logging = args.logging
                                         )
-            #! this should not be a dict
+
             for act_type in args.act_types:
                 if act_type == 'resid':
                     torch.save(acts_dict[act_type], args.save_path + f"/{args.file_spec}hidden_states.pt")

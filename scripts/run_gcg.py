@@ -40,6 +40,7 @@ def parse_args():
     
     # GCG Args
     parser.add_argument("--num_steps", type = int, default = 500, 
+    parser.add_argument("--num_steps", type = int, default = 500, 
                         help = "num steps for GCG")
     parser.add_argument("--search_width", type = int, default = 48, 
                         help = "batch size for GCG")
@@ -104,7 +105,6 @@ if __name__=="__main__":
             print(probe_dataset.idxs_probe_gets_wrong(probe, layer, tok_idxs = list(range(5))))
             print(f"Cosine Similarity of Random Probe to Learned Probe: {torch.nn.functional.cosine_similarity(probe.net[0].weight.data, trained_probe.net[0].weight.data)}")
             
-
         monitor = ActMonitor(probe = probe, layer = layer, tok_idxs = [-1, -2, -3, -4, -5], device = mw.model.device)
     elif args.monitor_type == "text":
         model = AutoModelForCausalLM.from_pretrained("meta-llama/LlamaGuard-7b", 
@@ -122,7 +122,6 @@ if __name__=="__main__":
     advbench_behaviors = pd.read_csv("../data/harmful_behaviors_custom.csv")
     results = []
     for i, row in list(advbench_behaviors.iterrows()):
-        
         gcg_config = GCGConfig(num_steps = args.num_steps, 
                                search_width = args.search_width, 
                                n_replace = args.n_replace, 
@@ -133,7 +132,6 @@ if __name__=="__main__":
         print(row['goal'])
         print(row['target'])
         
-
         attack_res = run(mw, messages = row['goal'], target = row['target'], monitor = monitor, config = gcg_config)
         results.append(attack_res)
 

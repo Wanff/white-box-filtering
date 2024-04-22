@@ -393,18 +393,17 @@ class ModelWrapper(torch.nn.Module):
         
         does NOT support autoregressive generation
         """
-        self.wrap_all()
-        self.reset()
+        if return_types != ['resid']:
+            self.wrap_all()
+            self.reset()
         
         if isinstance(layers, int):
             layers = [layers]
-            
-        @find_executable_batch_size(starting_batch_size=len(prompts) )
-        def inner_loop(batch_size):
+
+        def _inner_loop(batch_size):
             nonlocal prompts, layers, tok_idxs, return_types, logging, kwargs
             hidden_states_dict = defaultdict(list)
             tot_prompts = 0
-            tot_time = 0
             
             for i in tqdm(range(0, len(prompts), batch_size)):
                 start_time = time.time()
@@ -425,23 +424,22 @@ class ModelWrapper(torch.nn.Module):
                         
                         hidden_states_dict[act_type].append(torch.stack([acts_dict[layer] for layer in acts_dict.keys()]))
                 
+                del outputs
                 gc.collect()
                 torch.cuda.empty_cache()
-                
-                # if logging:
-                #     end_time = time.time()  # End timer
-                #     elapsed_time = end_time - start_time
-                #     tot_time += elapsed_time
-                #     print(f"Total time elapsed: {tot_time:.2f} seconds")
-                #     print(f"Total Hidden States Genned: {tot_prompts}")
-                #     # for act_type in return_types:
-                #         # print(f"Shape of {act_type} one batch Hidden States: {hidden_states_dict[act_type][layers[0]][-1].shape}")
-                #     print()
                 
             for act_type in hidden_states_dict:
                 hidden_states_dict[act_type] = torch.cat(hidden_states_dict[act_type], dim = 1).transpose(0, 1)
             return hidden_states_dict
-        return inner_loop()
+        
+        @find_executable_batch_size(starting_batch_size=len(prompts))
+        def inner_loop(batch_size):
+            return _inner_loop(batch_size)
+        
+        try:
+            return inner_loop()
+        except:
+            return _inner_loop(1)
                                
     def batch_generate_autoreg(self, prompts, 
                                    max_new_tokens: int = 32,
@@ -514,7 +512,7 @@ class ModelWrapper(torch.nn.Module):
     
         hidden_states_layers = {}
         for layer in hidden_layers:
-            layer = layer + 1 #we do this because usually we 0-index layers, but hf does not
+            layer = layer + 1 #we do this because usually we 0-index layers, but hf does not bc it includes the embedding
             hidden_states = outputs['hidden_states'][layer]
             hidden_states =  hidden_states[:, tok_idxs, :]
             # hidden_states_layers[layer] = hidden_states.cpu().to(dtype=torch.float32).detach().numpy()

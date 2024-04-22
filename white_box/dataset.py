@@ -368,7 +368,7 @@ class ProbeDataset():
         self.N_LAYERS = self.act_dataset.X.shape[1]
         self.N_TOKS = self.act_dataset.X.shape[2]
     
-    def layer_sweep_results(self,
+    def layer_tokidx_sweep_results(self,
                             lr : float = 0.01,
                             weight_decay : float = 1,
                             epochs : int = 500,
@@ -392,8 +392,8 @@ class ProbeDataset():
                                         device = "cuda")    
                     
                 probes[layer][tok_idx] = probe
-                probe_accs[layer][tok_idx] = probe.get_probe_accuracy(X_val, y_val, device = "cuda")
-                probe_aucs[layer][tok_idx] = probe.get_probe_auc(X_val, y_val, device = "cuda")
+                probe_accs[layer][tok_idx] = probe.get_probe_accuracy(X_val, y_val)
+                probe_aucs[layer][tok_idx] = probe.get_probe_auc(X_val, y_val)
         
         return np.array(probe_accs).T, np.array(probe_aucs).T, probes
 
