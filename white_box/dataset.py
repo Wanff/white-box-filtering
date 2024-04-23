@@ -421,7 +421,7 @@ class ProbeDataset():
     
     def train_mm_probe(self, layer : int, tok_idxs : List[int],
                             test_size = 0.2, 
-                            device='cuda',
+                            device='cpu',
                        ):
         X_train, X_val, y_train, y_val = self.act_dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = 0)
         probe = MMProbe.from_data(X_train.to(device), y_train.to(device), device=device)

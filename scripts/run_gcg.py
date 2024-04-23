@@ -40,7 +40,6 @@ def parse_args():
     
     # GCG Args
     parser.add_argument("--num_steps", type = int, default = 500, 
-    parser.add_argument("--num_steps", type = int, default = 500, 
                         help = "num steps for GCG")
     parser.add_argument("--search_width", type = int, default = 48, 
                         help = "batch size for GCG")
@@ -86,14 +85,16 @@ if __name__=="__main__":
     
     if "act" in args.monitor_type:
         layer = args.probe_layer
-        neg =  create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['jb_name'] == 'harmless')")
-        pos = create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['jb_name'] == 'DirectRequest')")
+        # neg =  create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['jb_name'] == 'harmless')")
+        # pos = create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['jb_name'] == 'DirectRequest')")
+        pos = create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['label'] == 1)")
+        neg =  create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['label'] == 0)")
         print(len(pos.idxs), len(neg.idxs))
         dataset = ActDataset([pos], [neg])
         dataset.instantiate()
         probe_dataset = ProbeDataset(dataset)
 
-        acc, auc, probe = probe_dataset.train_sk_probe(layer, tok_idxs = list(range(5)), test_size = 0.25, C = args.probe_reg, max_iter = args.max_iter, device = mw.model.device)
+        acc, auc, probe = probe_dataset.train_sk_probe(layer, tok_idxs = list(range(5)), test_size = None, C = args.probe_reg, max_iter = args.max_iter, use_train_test_split=False, device = mw.model.device)
         print(acc, auc)
         
         if args.monitor_type == "act_rand":

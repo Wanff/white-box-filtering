@@ -16,14 +16,14 @@ class Probe:
     def predict_proba(self, x):
         raise NotImplementedError
 
-    def get_probe_accuracy(self, X_test, y_test):
-        preds = self.predict(X_test)
+    def get_probe_accuracy(self, X_test, y_test, device='cpu'):
+        preds = self.predict(X_test.to(device))
 
-        accuracy = (preds.detach().cpu() == y_test.detach().cpu()).float().mean().item()
+        accuracy = (preds.detach() == y_test.detach().to(device)).float().mean().item()
         return accuracy
 
-    def get_probe_auc(self, X_test, y_test):
-        preds = self.predict_proba(X_test)
+    def get_probe_auc(self, X_test, y_test, device='cpu'):
+        preds = self.predict_proba(X_test.to(device))
         
         auc = roc_auc_score(y_test.detach().cpu().numpy(), preds.detach().cpu().numpy())
         return auc
@@ -182,7 +182,7 @@ class MMProbe(t.nn.Module, Probe):
         return self(x, iid=iid).round()
 
     def predict_proba(self, x, iid=False):
-        return self(x, iid=iid)
+        return self(x.to(self.direction.device), iid=iid)
     
     def from_data(acts, labels, atol=1e-3, device='cpu'):
         acts, labels
