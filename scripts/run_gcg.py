@@ -85,10 +85,13 @@ if __name__=="__main__":
     
     if "act" in args.monitor_type:
         layer = args.probe_layer
-        # neg =  create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['jb_name'] == 'harmless')")
-        # pos = create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['jb_name'] == 'DirectRequest')")
-        pos = create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['label'] == 1)")
-        neg =  create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['label'] == 0)")
+        # if last 3 are 'jb_'
+        if args.probe_data_path[-3:] == 'jb_':
+            neg =  create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['jb_name'] == 'harmless')")
+            pos = create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['jb_name'] == 'DirectRequest')")
+        else: 
+            pos = create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['label'] == 1)")
+            neg =  create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['label'] == 0)")
         print(len(pos.idxs), len(neg.idxs))
         dataset = ActDataset([pos], [neg])
         dataset.instantiate()
