@@ -422,9 +422,15 @@ class ProbeDataset():
     def train_mm_probe(self, layer : int, tok_idxs : List[int],
                             test_size = 0.2, 
                             device='cpu',
+                            random_state = 0,
+                            use_train_test_split = True,
                        ):
-        X_train, X_val, y_train, y_val = self.act_dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = 0)
-        probe = MMProbe.from_data(X_train.to(device), y_train.to(device), device=device)
+        if use_train_test_split:
+            X_train, X_val, y_train, y_val = self.act_dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = random_state)
+        else:
+            y_train, X_train = self.act_dataset.convert_states(self.act_dataset.X, self.act_dataset.y, tok_idxs = tok_idxs, layer = layer)
+            X_val, y_val = X_train, y_train        
+        probe = MMProbe.from_data(X_train.float().to(device), y_train.float().to(device), device=device)
 
         # center val data
         X_val = X_val - X_val.mean(0)

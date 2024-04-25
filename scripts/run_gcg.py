@@ -97,7 +97,8 @@ if __name__=="__main__":
         dataset.instantiate()
         probe_dataset = ProbeDataset(dataset)
 
-        acc, auc, probe = probe_dataset.train_sk_probe(layer, tok_idxs = list(range(5)), test_size = None, C = args.probe_reg, max_iter = args.max_iter, use_train_test_split=False, device = mw.model.device)
+        # acc, auc, probe = probe_dataset.train_sk_probe(layer, tok_idxs = list(range(5)), test_size = None, C = args.probe_reg, max_iter = args.max_iter, use_train_test_split=False, device = mw.model.device)
+        acc, auc, probe = probe_dataset.train_mm_probe(layer, tok_idxs=list(range(5)), test_size=None, device=mw.model.device)
         print(acc, auc)
         
         if args.monitor_type == "act_rand":
