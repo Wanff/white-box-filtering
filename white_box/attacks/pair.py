@@ -50,7 +50,7 @@ def run(goal : str, target : str,
     res_dict = {
         "attacks" : [],
         "responses" : [],
-        "monitor_scores" : [],
+        "monitor_losses" : [],
         "judge_scores" : [],
         
     }
