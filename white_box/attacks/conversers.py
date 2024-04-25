@@ -116,7 +116,8 @@ class AttackLM():
                                                         max_n_tokens = self.max_n_tokens,  
                                                         temperature = self.temperature,
                                                         top_p = self.top_p
-                                                    )['text']
+                                                    )
+            outputs_list = [output['text'] for output in outputs_list]
             
             # Check for valid outputs and update the list
             new_indices_to_regenerate = []
