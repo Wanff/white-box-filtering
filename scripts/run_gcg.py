@@ -53,7 +53,7 @@ def parse_args():
                     help = "")
     parser.add_argument("--use_search_width_sched", action="store_true",
                     help = "")
-    parser.add_argument("--seed", type = int, default = None)
+    parser.add_argument("--seed", type = int, default = 0)
     
     # Monitor Args
     parser.add_argument('--monitor_type', type = str, help = "can be act, act_rand, text, or none")
@@ -85,14 +85,20 @@ if __name__=="__main__":
     
     if "act" in args.monitor_type:
         layer = args.probe_layer
-        neg =  create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['jb_name'] == 'harmless')")
-        pos = create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['jb_name'] == 'DirectRequest')")
+        # if last 3 are 'jb_'
+        if args.probe_data_path[-3:] == 'jb_':
+            neg =  create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['jb_name'] == 'harmless')")
+            pos = create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['jb_name'] == 'DirectRequest')")
+        else: 
+            pos = create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['label'] == 1)")
+            neg =  create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['label'] == 0)")
         print(len(pos.idxs), len(neg.idxs))
         dataset = ActDataset([pos], [neg])
         dataset.instantiate()
         probe_dataset = ProbeDataset(dataset)
 
-        acc, auc, probe = probe_dataset.train_sk_probe(layer, tok_idxs = list(range(5)), test_size = 0.25, C = args.probe_reg, max_iter = args.max_iter, device = mw.model.device)
+        # acc, auc, probe = probe_dataset.train_sk_probe(layer, tok_idxs = list(range(5)), test_size = None, C = args.probe_reg, max_iter = args.max_iter, use_train_test_split=False, device = mw.model.device)
+        acc, auc, probe = probe_dataset.train_mm_probe(layer, tok_idxs=list(range(5)), test_size=None, device=mw.model.device)
         print(acc, auc)
         
         if args.monitor_type == "act_rand":

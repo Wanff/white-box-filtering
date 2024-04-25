@@ -56,7 +56,7 @@
 
 python get_activations.py \
     --model_name "llama2_7b" \
-    --dataset_name_or_path "/home/ubuntu/rowan/white-box-filtering/data/harmbench_alpaca.csv" \
-    --save_path "/home/ubuntu/rowan/white-box-filtering/data/llama2_7b/" \
+    --dataset_name_or_path "../data/llama2_7b/generated_no_rephrase_metadata.csv" \
+    --save_path "../data/llama2_7b/" \
     --tok_idxs -1 -2 -3 -4 -5  \
-    --file_spec "harmbench_alpaca_"
+    --file_spec "generated_no_rephrase_"

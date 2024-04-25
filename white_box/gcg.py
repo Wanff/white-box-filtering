@@ -198,7 +198,7 @@ def compute_candidates_loss(
                 
             gcg_loss = config.gcg_loss_weight * torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1), reduction="none") 
             gcg_loss = gcg_loss.view(current_batch_size, -1).mean(dim=-1)
-            monitor_loss = + config.monitor_loss_weight * monitor_loss
+            monitor_loss =  config.monitor_loss_weight * monitor_loss
             
             loss = gcg_loss + monitor_loss
             all_loss.append(loss)
