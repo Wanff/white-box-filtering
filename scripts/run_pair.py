@@ -22,7 +22,7 @@ from white_box.chat_model_utils import load_model_and_tokenizer, get_template, M
 
 from white_box.dataset import PromptDist, ActDataset, create_prompt_dist_from_metadata_path, ProbeDataset
 from white_box.probes import LRProbe
-from white_box.pair.pair import run
+from white_box.attacks.pair import run
 from white_box.monitor import ActMonitor, TextMonitor
 
 def parse_args():
