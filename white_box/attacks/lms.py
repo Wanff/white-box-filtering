@@ -94,7 +94,7 @@ class HuggingFace(LanguageModel):
         #* monitor stuff
         if monitor is not None:
             if isinstance(monitor, ActMonitor):
-                monitor_input = slice_acts(out, 
+                monitor_input = slice_acts(output, 
                             N_TOKS = max_n_tokens, 
                             layers = monitor.layer,
                             tok_idxs = torch.tensor(monitor.tok_idxs) - max_n_tokens if monitor.monitor_type == "input" else monitor.tok_idxs,

@@ -26,7 +26,7 @@ def run(goal : str, target : str,
         monitor : Monitor = None, 
         
         ###### pair params
-        n_streams : int = 3,
+        n_streams : int = 5,
         keep_last_n : int = 2,
         n_iterations : int = 20):
     system_prompt = get_attacker_system_prompt(goal, target, use_monitor = True if monitor is not None else False)
