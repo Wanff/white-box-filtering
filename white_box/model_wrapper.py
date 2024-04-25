@@ -276,6 +276,7 @@ def slice_acts(out, N_TOKS: int, return_prompt_acts: bool, layers: List, tok_idx
     else:
         #first loop goes through the tokens, second loop goes through the layers or something
         acts = torch.stack([torch.cat(out.hidden_states[i], dim = 1) for i in range(1, N_TOKS)], dim = 1)  #1, N_TOKS bc the first index is all previous tokens
+        print(acts.shape)
         acts = rearrange(acts, 'b t l d -> b l t d')
 
     #shape: batch_size x N_TOKS - 1 x n_layers + 1 x d_M

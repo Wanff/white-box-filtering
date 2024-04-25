@@ -10,18 +10,23 @@ class Monitor:
     
     def get_loss(self, data):
         raise NotImplementedError
+    
+
+#TODO: need to create generic textmonitor and actmonitor classes, and then the pca/mm/mlp stuff should subclass actmonitor and the llamaguard/oai mod/harmbench should subclass textmonitor
 
 class TextMonitor(Monitor):
     def __init__(self, model : AutoModelForCausalLM, tokenizer : AutoTokenizer, 
                  score_id : int,
-                 use_kv_cache : bool = True):
-        
+                 use_kv_cache : bool = True,
+                 monitor_type : str = "input"):
+        #LLAMA Guard
         self.model = model
         self.tokenizer = tokenizer
         self.score_id = score_id
         
         self.before_str = None
         self.after_str = None 
+        self.monitor_type = monitor_type
         
         if use_kv_cache:
             chat = [{"role": "user", "content": ""}]
@@ -72,11 +77,11 @@ class TextMonitor(Monitor):
 
     
 class ActMonitor():
-    def __init__(self, probe : Probe, layer : int, tok_idxs : List[int], device):
+    def __init__(self, probe : Probe, layer : int, tok_idxs : List[int], monitor_type : str = "input"):
         self.probe = probe
         self.layer = layer
         self.tok_idxs = tok_idxs
-        self.device = device
+        self.monitor_type = monitor_type 
 
     def predict_proba(self, acts):
         return self.probe.predict_proba(acts)

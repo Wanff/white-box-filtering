@@ -104,7 +104,7 @@ if __name__=="__main__":
             print(probe_dataset.idxs_probe_gets_wrong(probe, layer, tok_idxs = list(range(5))))
             print(f"Cosine Similarity of Random Probe to Learned Probe: {torch.nn.functional.cosine_similarity(probe.net[0].weight.data, trained_probe.net[0].weight.data)}")
             
-        monitor = ActMonitor(probe = probe, layer = layer, tok_idxs = [-1, -2, -3, -4, -5], device = mw.model.device)
+        monitor = ActMonitor(probe = probe, layer = layer, tok_idxs = [-1, -2, -3, -4, -5])
     elif args.monitor_type == "text":
         model = AutoModelForCausalLM.from_pretrained("meta-llama/LlamaGuard-7b", 
                 torch_dtype=torch.float16, 
