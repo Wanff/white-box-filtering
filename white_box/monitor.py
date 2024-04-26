@@ -43,7 +43,7 @@ class TextMonitor(Monitor):
         input_ids = self.tokenizer.apply_chat_template(chat, return_tensors="pt").to(self.model.device)
         
         if self.model_type == 'causal_lm':
-            output = self.model.generate(input_ids=input_ids,
+            output = self.model.generate(input_ids=input_ids, max_new_tokens=5,
                                      output_scores = True, 
                                      past_key_values = self.kv_cache if self.kv_cache is not None else None,
                                      return_dict_in_generate = True, 
@@ -57,15 +57,9 @@ class TextMonitor(Monitor):
 
     def _predict_proba_from_embeds(self, embeds: torch.Tensor): 
         if self.model_type == 'causal_lm': 
-            # check if embeds is tracking grad
-            print()
-            print(embeds.shape, len(self.kv_cache), len(self.kv_cache[0]))
-            output = self.model.generate(inputs_embeds=embeds, max_new_tokens=5,
-                                        
-                                        past_key_values=self.kv_cache if self.kv_cache is not None else None, 
-                                        return_dict_in_generate=True,
-                                        pad_token_id=0)
-            proba = torch.softmax(output['scores'][0], dim=1)[:, self.score_id].squeeze()
+            output = self.model(inputs_embeds=embeds,
+                                        past_key_values=self.kv_cache if self.kv_cache is not None else None)
+            proba = output.logits.softmax(-1)[:,-1,self.score_id].squeeze()
         elif self.model_type == 'sequence_classification': 
             output = self.model(inputs_embeds=embeds, past_key_values = self.kv_cache if self.kv_cache is not None else None)
             proba = output.logits.softmax(dim=-1)[0,1]
@@ -83,7 +77,6 @@ class TextMonitor(Monitor):
             return torch.tensor(probas, device = self.model.device)
     
     def get_loss(self, embeds : torch.Tensor): 
-        print(embeds.shape)
         return self._predict_proba_from_embeds(embeds)
 
     def get_loss_no_grad(self, prompt : str):
