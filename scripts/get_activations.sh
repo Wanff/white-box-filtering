@@ -56,7 +56,7 @@
 
 python get_activations.py \
     --model_name "llama2_7b" \
-    --dataset_name_or_path "../data/llama2_7b/generated_metadata.csv" \
+    --dataset_name_or_path "../data/llama2_7b/generated_no_rephrase_metadata.csv" \
     --save_path "../data/llama2_7b/" \
     --tok_idxs -1 -2 -3 -4 -5  \
-    --file_spec "generated_"
+    --file_spec "generated_no_rephrase_"
