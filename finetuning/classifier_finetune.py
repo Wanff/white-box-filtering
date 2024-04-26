@@ -98,7 +98,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_name', type=str, default='meta-llama/LlamaGuard-7b')
-    parser.add_argument('--path', type=str, default='../data/llama2_7b')
+    parser.add_argument('--path', type=str, default='/home/ubuntu/rowan/white-box-filtering/data/llama2_7b')
     parser.add_argument('--file_spec', type=str, default='harmbench_alpaca_')
     parser.add_argument('--seed', type=int, default=0, help='seed')
     parser.add_argument('--lr', type=float, default=5e-5, help='learning rate')
