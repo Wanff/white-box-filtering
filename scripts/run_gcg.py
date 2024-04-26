@@ -10,9 +10,10 @@ import time
 import datasets
 from datasets import load_dataset
 from dataclasses import dataclass
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSequenceClassification
 import argparse 
 import json
+from peft import AutoPeftModelForSequenceClassification
 
 import sys
 sys.path.append('../') 
@@ -57,6 +58,7 @@ def parse_args():
     
     # Monitor Args
     parser.add_argument('--monitor_type', type = str, help = "can be act, act_rand, text, or none")
+    parser.add_argument('--monitor_path', type = str, help = "path to monitor model")
     parser.add_argument("--probe_layer", type = int, default = 24,
                         help="string appended to saved acts")
     parser.add_argument("--probe_data_path", type = str, default = "jb_",
@@ -112,7 +114,14 @@ if __name__=="__main__":
             
         monitor = ActMonitor(probe = probe, layer = layer, tok_idxs = [-1, -2, -3, -4, -5])
     elif args.monitor_type == "text":
-        model = AutoModelForCausalLM.from_pretrained("meta-llama/LlamaGuard-7b", 
+        if args.monitor_path is not None: 
+            print("ASSUMING AUTO MODEL FOR SEQUENCE CLASSIFICATION")
+            model = AutoPeftModelForSequenceClassification.from_pretrained(args.monitor_path, 
+                torch_dtype=torch.float16, 
+                device_map="auto")
+            model = model.merge_and_unload()
+        else: 
+            model = AutoModelForCausalLM.from_pretrained("meta-llama/LlamaGuard-7b", 
                 torch_dtype=torch.float16, 
                 device_map="auto")
         tokenizer = AutoTokenizer.from_pretrained(
@@ -120,10 +129,12 @@ if __name__=="__main__":
             use_fast=False,
             padding_side="left")
         
-        monitor = TextMonitor(model, tokenizer, score_id = 25110)
+        model_type = 'sequence_classification' if args.monitor_path is not None else 'causal_lm'
+        print(model_type)
+        model.train()
+        monitor = TextMonitor(model, tokenizer, score_id = 25110, model_type=model_type)
     else:
         monitor = None
-    
     advbench_behaviors = pd.read_csv("../data/harmful_behaviors_custom.csv")
     results = []
     for i, row in list(advbench_behaviors.iterrows()):

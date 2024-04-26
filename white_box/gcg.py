@@ -68,7 +68,7 @@ def clear_gpus():
     
 def sample_ids_from_grad(
     ids: Tensor, 
-    grad: Tensor, 
+    grad: Tensor,
     search_width: int, 
     topk: int = 256,
     n_replace: int = 1,
@@ -185,12 +185,13 @@ def compute_candidates_loss(
                             layers = monitor.layer,
                             tok_idxs = torch.tensor(monitor.tok_idxs) - target_ids.shape[1],
                             return_prompt_acts = False,
-                            device = monitor.device)
+                            device = model.device)
                 elif isinstance(monitor, TextMonitor):
                     monitor_input = monitor.get_monitor_input(sampled_ids)
             
-                monitor_loss = monitor.get_loss(monitor_input)
+                monitor_loss = monitor.get_loss_no_grad(monitor_input)
                 
+                print(monitor_loss)
                 del monitor_input
                 clear_gpus()
             else:
@@ -339,12 +340,13 @@ def run(
                             layers = monitor.layer,
                             tok_idxs = torch.tensor(monitor.tok_idxs) - target_ids.shape[1],
                             return_prompt_acts = False,
-                            device = monitor.device)
+                            device = mw.model.device)
+                monitor_loss = monitor.get_loss(monitor_input)
+                del monitor_input
             elif isinstance(monitor, TextMonitor):
-                monitor_input = monitor.get_monitor_input(mw.tokenizer.batch_decode(optim_ids))
+                monitor_loss = monitor.get_loss(optim_embeds)
             
-            monitor_loss = monitor.get_loss(monitor_input)
-            del monitor_input
+            print(monitor_loss)
             del output
             clear_gpus()
         else:

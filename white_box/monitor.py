@@ -1,5 +1,5 @@
 import torch 
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, AutoModelForSequenceClassification
 from typing import List, Union
 
 from white_box.probes import Probe, LRProbe, MLP, MMProbe
@@ -15,10 +15,11 @@ class Monitor:
 #TODO: need to create generic textmonitor and actmonitor classes, and then the pca/mm/mlp stuff should subclass actmonitor and the llamaguard/oai mod/harmbench should subclass textmonitor
 
 class TextMonitor(Monitor):
-    def __init__(self, model : AutoModelForCausalLM, tokenizer : AutoTokenizer, 
+    def __init__(self, model : AutoModelForCausalLM | AutoModelForSequenceClassification, tokenizer : AutoTokenizer, 
                  score_id : int,
                  use_kv_cache : bool = True,
-                 monitor_type : str = "input"):
+                 monitor_type : str = "input", 
+                 model_type : str = 'causal_lm'):
         #LLAMA Guard
         self.model = model
         self.tokenizer = tokenizer
@@ -27,6 +28,7 @@ class TextMonitor(Monitor):
         self.before_str = None
         self.after_str = None 
         self.monitor_type = monitor_type
+        self.model_type = model_type
         
         if use_kv_cache:
             chat = [{"role": "user", "content": ""}]
@@ -40,13 +42,35 @@ class TextMonitor(Monitor):
         chat = [{"role": "user", "content": prompt}]
         input_ids = self.tokenizer.apply_chat_template(chat, return_tensors="pt").to(self.model.device)
         
-        output = self.model.generate(input_ids=input_ids, max_new_tokens=5, 
+        if self.model_type == 'causal_lm':
+            output = self.model.generate(input_ids=input_ids,
                                      output_scores = True, 
                                      past_key_values = self.kv_cache if self.kv_cache is not None else None,
                                      return_dict_in_generate = True, 
                                      pad_token_id=0)
+            proba = torch.softmax(output['scores'][0], dim = 1)[:, self.score_id].squeeze()
+        elif self.model_type == 'sequence_classification':
+            output = self.model(input_ids, past_key_values = self.kv_cache if self.kv_cache is not None else None)
+            proba = output.logits.softmax(dim=-1)[0,1]
         
-        return torch.softmax(output['scores'][0], dim = 1)[:, self.score_id].squeeze()
+        return proba
+
+    def _predict_proba_from_embeds(self, embeds: torch.Tensor): 
+        if self.model_type == 'causal_lm': 
+            # check if embeds is tracking grad
+            print()
+            print(embeds.shape, len(self.kv_cache), len(self.kv_cache[0]))
+            output = self.model.generate(inputs_embeds=embeds, max_new_tokens=5,
+                                        
+                                        past_key_values=self.kv_cache if self.kv_cache is not None else None, 
+                                        return_dict_in_generate=True,
+                                        pad_token_id=0)
+            proba = torch.softmax(output['scores'][0], dim=1)[:, self.score_id].squeeze()
+        elif self.model_type == 'sequence_classification': 
+            output = self.model(inputs_embeds=embeds, past_key_values = self.kv_cache if self.kv_cache is not None else None)
+            proba = output.logits.softmax(dim=-1)[0,1]
+        
+        return proba
     
     def predict_proba(self, prompts : Union[str, List[str]]):
         if isinstance(prompts, str):
@@ -58,7 +82,11 @@ class TextMonitor(Monitor):
 
             return torch.tensor(probas, device = self.model.device)
     
-    def get_loss(self, prompt : str):
+    def get_loss(self, embeds : torch.Tensor): 
+        print(embeds.shape)
+        return self._predict_proba_from_embeds(embeds)
+
+    def get_loss_no_grad(self, prompt : str):
         return self.predict_proba(prompt)
     
     def set_before_after_str(self, before_str : str, after_str: str):
@@ -91,3 +119,7 @@ class ActMonitor():
             return self.predict_proba(acts.float()).mean(dim = -1)
         else:
             return self.predict_proba(acts.float())
+
+    def get_loss_no_grad(self, acts : torch.Tensor): 
+        with torch.no_grad(): 
+            return self.get_loss(acts)
