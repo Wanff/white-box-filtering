@@ -191,7 +191,6 @@ def compute_candidates_loss(
             
                 monitor_loss = monitor.get_loss_no_grad(monitor_input)
                 
-                print(monitor_loss)
                 del monitor_input
                 clear_gpus()
             else:
@@ -237,7 +236,7 @@ def run(
         A dict that stores losses and the final optim_str
     """
     def n_replace_sched(step: int) -> int:
-        n_replace = int((1 - step / 300) * config.n_replace)
+        n_replace = int((1 - (step / config.num_steps)) * config.n_replace)
         if n_replace < 1:
             return 1
         return n_replace

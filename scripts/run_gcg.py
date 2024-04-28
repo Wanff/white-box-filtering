@@ -85,7 +85,7 @@ if __name__=="__main__":
 
     mw = ModelWrapper(model, tokenizer, template = template)
     
-    if "act" in args.monitor_type:
+    if args.monitor_type == 'act': 
         layer = args.probe_layer
         # if last 3 are 'jb_'
         if args.probe_data_path[-3:] == 'jb_':
@@ -99,8 +99,8 @@ if __name__=="__main__":
         dataset.instantiate()
         probe_dataset = ProbeDataset(dataset)
 
-        # acc, auc, probe = probe_dataset.train_sk_probe(layer, tok_idxs = list(range(5)), test_size = None, C = args.probe_reg, max_iter = args.max_iter, use_train_test_split=False, device = mw.model.device)
-        acc, auc, probe = probe_dataset.train_mm_probe(layer, tok_idxs=list(range(5)), test_size=None, device=mw.model.device)
+        acc, auc, probe = probe_dataset.train_sk_probe(layer, tok_idxs = list(range(5)), test_size = None, C = args.probe_reg, max_iter = args.max_iter, use_train_test_split=False, device = mw.model.device)
+        # acc, auc, probe = probe_dataset.train_mm_probe(layer, tok_idxs=list(range(5)), test_size=None, device=mw.model.device)
         print(acc, auc)
         
         if args.monitor_type == "act_rand":
