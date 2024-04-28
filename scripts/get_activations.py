@@ -67,6 +67,9 @@ def get_mw(args):
     if args.model_name in MODEL_CONFIGS: # for chat_models
         model_config = MODEL_CONFIGS[args.model_name]
         model, tokenizer = load_model_and_tokenizer(**model_config, device=args.device)
+        if args.model_name == 'llama2_7b_dutch': 
+            tokenizer.pad_token = 18610
+            model.config.pad_token_id = 18610
     elif args.model_name in LORA_MODELS: 
         assert args.device == 'cuda', "LoRA models only work on cuda"
         config = PeftConfig.from_pretrained(args.model_name)
