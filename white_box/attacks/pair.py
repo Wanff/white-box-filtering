@@ -26,7 +26,7 @@ def run(goal : str, target : str,
         monitor : Monitor = None, 
         
         ###### pair params
-        n_streams : int = 5,
+        n_streams : int = 2,
         keep_last_n : int = 2,
         n_iterations : int = 20):
     system_prompt = get_attacker_system_prompt(goal, target, use_monitor = True if monitor is not None else False)
@@ -52,7 +52,6 @@ def run(goal : str, target : str,
         "responses" : [],
         "monitor_losses" : [],
         "judge_scores" : [],
-        
     }
     
     # Begin PAIR
@@ -64,6 +63,10 @@ def run(goal : str, target : str,
         # Get adversarial prompts and improvement
         extracted_attack_list = attackLM.get_attack(convs_list, processed_response_list)
         print("Finished getting adversarial prompts.")
+        
+        if None in extracted_attack_list:
+            print("Weird None found. Continuing.")
+            continue 
 
         # Extract prompts and improvements
         adv_prompt_list = [attack["prompt"] for attack in extracted_attack_list]

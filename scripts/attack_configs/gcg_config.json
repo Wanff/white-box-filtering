@@ -1,0 +1,13 @@
+{
+    "num_steps": 500,
+    "optim_str_init": "! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !",
+    "search_width": 48,
+    "topk": 256,
+    "n_replace": 16,
+    "buffer_size": 16,
+    "add_space_before_target": true,
+    "device": "cuda",
+    "gcg_loss_weight": 1.0,
+    "monitor_loss_weight": 1.0,
+    "use_search_width_sched": false
+}

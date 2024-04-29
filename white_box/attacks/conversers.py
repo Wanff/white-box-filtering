@@ -37,9 +37,9 @@ def load_attack_and_target_models(attack_model : str, attack_max_n_tokens : int,
                         )
     return attackLM, targetLM
 
-def load_target_model(args, preloaded_model = None, monitor = None):
-    targetLM = TargetLM(model_name = args.target_model, 
-                        max_n_tokens = args.target_max_n_tokens,
+def load_target_model(model_name : str, target_max_n_tokens : int, preloaded_model = None, monitor = None):
+    targetLM = TargetLM(model_name = model_name, 
+                        max_n_tokens = target_max_n_tokens,
                         preloaded_model = preloaded_model,
                         monitor = monitor,
                         temperature = TARGET_TEMP, # init to 0
@@ -143,6 +143,8 @@ class AttackLM():
         
         if any([output for output in valid_outputs if output is None]):
             print(f"Failed to generate output after {self.max_n_attack_attempts} attempts. Terminating.")
+            
+            valid_outputs = [output if output is not None else {"improvement": "","prompt": ""} for output in valid_outputs]
         return valid_outputs
 
 class TargetLM():

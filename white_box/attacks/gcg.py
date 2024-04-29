@@ -10,8 +10,8 @@ from torch import Tensor
 
 from accelerate.utils import find_executable_batch_size
 
-from white_box.model_wrapper import slice_acts, ModelWrapper
-from white_box.monitor import Monitor, ActMonitor, TextMonitor
+from ..model_wrapper import slice_acts, ModelWrapper
+from ..monitor import Monitor, ActMonitor, TextMonitor
 
 @dataclass
 class GCGConfig:

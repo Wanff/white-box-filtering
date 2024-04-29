@@ -1,0 +1,13 @@
+{
+    "attack_model": "vicuna",
+    "attack_max_n_tokens": 500,
+    "max_n_attack_attempts": 5,
+    "target_model": "llama-2",
+    "target_max_n_tokens": 150,
+    "judge_model": "gpt-4",
+    "judge_max_n_tokens": 50,
+    "judge_temperature": 0,
+    "n_streams": 3,
+    "keep_last_n": 2,
+    "n_iterations": 20
+}

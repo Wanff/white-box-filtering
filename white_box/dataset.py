@@ -19,7 +19,7 @@ from sklearn.metrics import accuracy_score, roc_auc_score
 
 from white_box.utils import eval_completions, ceildiv, gen_pile_data
 from white_box.model_wrapper import ModelWrapper
-from white_box.probes import Probe, LRProbe
+from white_box.probes import Probe, LRProbe, MMProbe, MLP
 
 #* clean memorized data 
 def clean_data(data : Union[List[str], List[int]], tokenizer : AutoTokenizer, 
@@ -431,6 +431,28 @@ class ProbeDataset():
             y_train, X_train = self.act_dataset.convert_states(self.act_dataset.X, self.act_dataset.y, tok_idxs = tok_idxs, layer = layer)
             X_val, y_val = X_train, y_train        
         probe = MMProbe.from_data(X_train.float().to(device), y_train.float().to(device), device=device)
+
+        # center val data
+        X_val = X_val - X_val.mean(0)
+
+        acc = probe.get_probe_accuracy(X_val, y_val, device = device)
+        auc = probe.get_probe_auc(X_val, y_val, device = device)
+
+        return acc, auc, probe
+
+    def train_mlp_probe(self, layer : int, tok_idxs : List[int],
+                            test_size = 0.2, 
+                            device='cpu',
+                            random_state = 0,
+                            use_train_test_split = True,
+                       ):
+        #TODO: FIX
+        if use_train_test_split:
+            X_train, X_val, y_train, y_val = self.act_dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = random_state)
+        else:
+            y_train, X_train = self.act_dataset.convert_states(self.act_dataset.X, self.act_dataset.y, tok_idxs = tok_idxs, layer = layer)
+            X_val, y_val = X_train, y_train        
+        probe = MLP.from_data(X_train.float().to(device), y_train.float().to(device), device=device)
 
         # center val data
         X_val = X_val - X_val.mean(0)
