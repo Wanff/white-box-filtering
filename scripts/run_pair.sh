@@ -3,8 +3,8 @@
 #SBATCH --nodes=1
 #SBATCH --gpus-per-node=1
 #SBATCH --time=24:00:00
-#SBATCH --job-name=LLaMaGuardGCG
-#SBATCH --output=LLaMaGuardGCG.out
+#SBATCH --job-name=JBProbePAIR
+#SBATCH --output=JBProbePAIR.out
 
 SAVE_PATH="../data/llama2_7b"
 FILE_SPEC="pair_run_lyr24"
@@ -18,4 +18,4 @@ python run_pair.py \
     --probe_data_path "../data/llama2_7b/jb_" \
     --probe_layer 24 \
     --seed 0 \
-    --file_spec "$FILE_SPEC"  &> "$SAVE_PATH/$FILE_SPEC.out" &
+    --file_spec "$FILE_SPEC"

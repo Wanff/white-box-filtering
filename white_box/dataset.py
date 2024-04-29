@@ -519,4 +519,18 @@ class ProbeDataset():
         print(f"Acc: {acc}")
         return self.act_dataset.metadata_test_idxs[torch.where(res == 0)[0]]
         
+    def get_probe_accuracy(self, probe : Probe, layer : int, tok_idxs : List[int], pred_method : str = "mean", thresh : float = 0.5, test_size = 1): 
         
+        val_states = self.act_dataset.X[:,layer, tok_idxs]
+        y_val = self.act_dataset.y
+
+        probas = probe.predict(val_states)
+        if pred_method == "mean":
+            preds = (probas.mean(dim = 1) > thresh)
+        elif pred_method == "any":
+            preds = (probas.any(dim = 1))
+        
+        
+        acc = (preds == y_val).sum() / len(y_val)
+        auc = roc_auc_score(y_val.cpu().numpy(), probas.mean(dim = 1).detach().cpu().numpy())
+        return acc, auc

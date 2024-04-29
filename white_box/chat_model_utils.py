@@ -34,6 +34,11 @@ MODEL_CONFIGS = {
         "dtype" : "float16",
         "chat_template" :"llama-2"
     },
+    "llama2_7b_dutch": {
+        "model_name_or_path": "Mirage-Studio/llama-gaan-2-7b-chat-hf-dutch", 
+        "dtype": "float16",
+        "chat_template": "llama-2"
+    }
 }
 
 LORA_MODELS = {
