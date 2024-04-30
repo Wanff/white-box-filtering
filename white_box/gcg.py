@@ -267,9 +267,6 @@ def run(
     before_str, after_str = template.split("{optim_str}")
     target = " " + target if config.add_space_before_target else target
     print(f"before, after, target : {before_str} | {after_str} | {target}")
-    
-    if monitor is not None and isinstance(monitor, TextMonitor):
-        monitor.set_before_after_str(before_str, after_str)
         
     # Tokenize everything that doesn't get optimized
     before_ids = mw.tokenizer([before_str], padding=False)["input_ids"]
@@ -285,6 +282,9 @@ def run(
     with torch.no_grad():
         output = mw.model(inputs_embeds=before_embeds, use_cache=True)
         kv_cache = output.past_key_values
+
+        if monitor is not None and isinstance(monitor, TextMonitor): 
+            monitor.set_kv_cache(messages[0]["content"])
     
     optim_ids = mw.tokenizer(config.optim_str_init, return_tensors="pt", add_special_tokens=False)["input_ids"].to(mw.model.device)
     
@@ -343,14 +343,15 @@ def run(
                 monitor_loss = monitor.get_loss(monitor_input)
                 del monitor_input
             elif isinstance(monitor, TextMonitor):
-                monitor_loss = monitor.get_loss(optim_embeds)
+
+                monitor_input_embeds = torch.cat([optim_embeds, after_embeds], dim=1)
+                monitor_loss = monitor.get_loss(monitor_input_embeds)
             
             print(monitor_loss)
             del output
             clear_gpus()
         else:
             monitor_loss = torch.tensor(0)
-            
             del output 
             clear_gpus()
         

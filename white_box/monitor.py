@@ -30,13 +30,22 @@ class TextMonitor(Monitor):
         self.monitor_type = monitor_type
         self.model_type = model_type
         
-        if use_kv_cache:
-            chat = [{"role": "user", "content": ""}]
-            input_ids = self.tokenizer.apply_chat_template(chat, return_tensors="pt").to(self.model.device) 
-            pre_instruction_ids = input_ids[:, :826]
-            with torch.no_grad():
-                output = model(pre_instruction_ids, use_cache=True)
-                self.kv_cache = output.past_key_values
+    def set_kv_cache(self, goal_str : str): 
+        chat = [{"role": "user", "content": ""}]
+        input_ids = self.tokenizer.apply_chat_template(chat, return_tensors="pt").to(self.model.device) 
+        goal_ids = self.tokenizer(goal_str, return_tensors="pt").input_ids.to(self.model.device)
+        pre_instruction_ids = torch.cat([input_ids[:, :827], goal_ids], dim=1)
+        print(pre_instruction_ids.shape)
+
+        self.after_str = self.tokenizer.decode(input_ids[:,827:])
+        print(self.tokenizer.decode(pre_instruction_ids[0]))
+
+        print("BEGIN AFTER")
+        print(self.after_str)
+        raise Exception
+        with torch.no_grad():
+            output = self.model(pre_instruction_ids, use_cache=True)
+            self.kv_cache = output.past_key_values
 
     def _predict_proba(self, prompt : str):
         chat = [{"role": "user", "content": prompt}]
@@ -81,20 +90,7 @@ class TextMonitor(Monitor):
 
     def get_loss_no_grad(self, prompt : str):
         return self.predict_proba(prompt)
-    
-    def set_before_after_str(self, before_str : str, after_str: str):
-        self.before_str = before_str
-        self.after_str = after_str
-    
-    def get_monitor_input(self, optim_strs : Union[str, torch.Tensor, List[str]]) -> List[str]:
-        assert self.before_str is not None and self.after_str is not None
 
-        if isinstance(optim_strs, str):
-            optim_strs = [optim_strs]
-        elif isinstance(optim_strs, torch.Tensor):
-            optim_strs = self.tokenizer.batch_decode(optim_strs)
-        
-        return [self.before_str + optim_str + self.after_str for optim_str in optim_strs]
 
     
 class ActMonitor():

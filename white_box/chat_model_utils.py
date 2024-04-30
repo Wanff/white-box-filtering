@@ -38,7 +38,19 @@ MODEL_CONFIGS = {
         "model_name_or_path": "Mirage-Studio/llama-gaan-2-7b-chat-hf-dutch", 
         "dtype": "float16",
         "chat_template": "llama-2"
-    }
+    },
+    "llama2_7b_hungarian": {
+        "model_name_or_path": "sambanovasystems/SambaLingo-Hungarian-Chat", 
+        "dtype": "bfloat16",
+        "chat_template": "llama-2-hungarian",
+        "use_fast_tokenizer": False,
+    },
+    "llama2_7b_slovenian": {
+        "model_name_or_path": "sambanovasystems/SambaLingo-Slovenian-Chat", 
+        "dtype": "bfloat16",
+        "chat_template": "llama-2-hungarian",
+        "use_fast_tokenizer": False,
+    },
 }
 
 LORA_MODELS = {
@@ -82,6 +94,11 @@ LLAMA2_CHAT_PROMPT = {
     "description": "Template used by Llama2 Chat",
     "prompt": "[INST] {instruction} [/INST] "
     # "prompt": "[INST] <<SYS>>\n"+LLAMA2_DEFAULT_SYSTEM_PROMPT+"\n<</SYS>>\n\n{instruction} [/INST] "
+}
+
+LLAMA2_HUNGARIAN_CHAT_TEMPLATE = {
+    'description': 'Template used by Llama2 Hungarian Chat',
+    'prompt': "<|user|>\n{instruction}</s>\n<|assistant|>\n", 
 }
 
 INTERNLM_PROMPT = { # https://github.com/InternLM/InternLM/blob/main/tools/alpaca_tokenizer.py
@@ -194,6 +211,8 @@ def get_template(model_name_or_path=None, chat_template=None, fschat_template=No
         TEMPLATE = OASST_PROMPT_v1_1
     elif chat_template == "llama-2":
         TEMPLATE = LLAMA2_CHAT_PROMPT
+    elif chat_template == "llama-2-hungarian":
+        TEMPLATE = LLAMA2_HUNGARIAN_CHAT_TEMPLATE
     elif chat_template == "falcon_instruct": #falcon 7b / 40b instruct
         TEMPLATE = FALCON_INSTRUCT_PROMPT
     elif chat_template == "falcon_chat": #falcon 180B_chat
