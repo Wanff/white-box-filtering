@@ -39,6 +39,15 @@
 #     --tok_idxs -1 -2 -3 -4 -5  \
 #     --file_spec "jb_eq_by_jbname_" &> ../data/llama2_7b/jb_eq_by_jbname.out &
 
+
+python get_activations.py \
+    --model_name "mistralai/Mistral-7B-Instruct-v0.2" \
+    --dataset_name_or_path "../data/llama2_7b/jb_metadata.csv" \
+    --save_path "../data/mistral/" \
+    --tok_idxs -1 -2 -3 -4 -5  \
+    --file_spec "jb_" &> ../data/mistral/jb_.out &
+
+
 # python get_activations.py \
 #     --model_name "akdeniz27/llama-2-7b-hf-qlora-dolly15k-turkish" \
 #     --dataset_name_or_path "/home/ubuntu/rowan/white-box-filtering/data/turkish/harmful_behaviors_custom.csv" \
@@ -54,9 +63,9 @@
 #     --tok_idxs -1 -2 -3 -4 -5  \
 #     --file_spec "jb_unif_behav_"
 
-python get_activations.py \
-    --model_name "akdeniz27/llama-2-7b-hf-qlora-dolly15k-turkish" \
-    --dataset_name_or_path "../data/turkish/harmless_behaviors_custom.csv" \
-    --save_path "../data/turkish/" \
-    --tok_idxs -1 -2 -3 -4 -5  \
-    --file_spec "harmless_behaviors_custom_"
+# python get_activations.py \
+#     --model_name "akdeniz27/llama-2-7b-hf-qlora-dolly15k-turkish" \
+#     --dataset_name_or_path "../data/turkish/harmless_behaviors_custom.csv" \
+#     --save_path "../data/turkish/" \
+#     --tok_idxs -1 -2 -3 -4 -5  \
+#     --file_spec "harmless_behaviors_custom_"

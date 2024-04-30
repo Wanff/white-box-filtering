@@ -38,6 +38,12 @@ MODEL_CONFIGS = {
         "model_name_or_path": "Mirage-Studio/llama-gaan-2-7b-chat-hf-dutch", 
         "dtype": "float16",
         "chat_template": "llama-2"
+    },
+    "mistralai/Mistral-7B-Instruct-v0.2" : {
+        "model_name_or_path" : "mistralai/Mistral-7B-Instruct-v0.2",
+        "use_fast_tokenizer": False,
+        "dtype" : "float16",
+        "chat_template" :"mistral"
     }
 }
 
