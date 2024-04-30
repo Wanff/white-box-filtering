@@ -104,7 +104,7 @@ class HuggingFace(LanguageModel):
                 monitor_losses = monitor.get_loss(full_prompts_list)
             
             for i, out in enumerate(outputs):
-                outputs[i]['monitor_loss'] = monitor_losses[i]
+                outputs[i]['monitor_loss'] = monitor_losses[i].item()
                 
         for key in inputs:
             inputs[key].to('cpu')

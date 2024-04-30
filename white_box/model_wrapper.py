@@ -271,8 +271,10 @@ def slice_acts(out, N_TOKS: int, return_prompt_acts: bool, layers: List, tok_idx
     if N_TOKS == 0:
         acts = torch.stack(out.hidden_states, dim = 1) #this is when you just call model(), not generate
     elif N_TOKS == 1:
-        acts = torch.stack([torch.cat(out.hidden_states[0], dim = 1)], dim = 1)  #1, N_TOKS bc the first index is all previous tokens
-        acts = rearrange(acts, 'b t l d -> b l t d')
+        # acts = torch.stack([torch.cat(out.hidden_states[0], dim = 1)], dim = 1)  #1, N_TOKS bc the first index is all previous tokens
+        acts = torch.stack(out.hidden_states[0], dim = 0) #shape: n_layers + 1 x batch_size x seq_len x d_M
+        acts = rearrange(acts, 'l b t d -> b l t d')
+        return_prompt_acts = False
     else:
         #first loop goes through the tokens, second loop goes through the layers or something
         acts = torch.stack([torch.cat(out.hidden_states[i], dim = 1) for i in range(1, N_TOKS)], dim = 1)  #1, N_TOKS bc the first index is all previous tokens
@@ -285,6 +287,7 @@ def slice_acts(out, N_TOKS: int, return_prompt_acts: bool, layers: List, tok_idx
     if return_prompt_acts:
         prompt_acts = torch.stack(out.hidden_states[0], dim = 0) #shape: n_layers + 1 x batch_size x seq_len x d_M
         prompt_acts = rearrange(prompt_acts, 'l b t d -> b l t d')
+        print(prompt_acts.shape)
         acts = torch.cat([prompt_acts, acts], dim = 2)
     
     if device == 'cpu':
