@@ -56,16 +56,34 @@ python get_activations.py \
 #     --device "cuda" \
 #     --file_spec "harmful_behaviors_custom_"
 
-# python get_activations.py dd\
-#     --model_name "akdeniz27/llama-2-7b-hf-qlora-dolly15k-turkish" \
-#     --dataset_name_or_path "/home/ubuntu/rowan/white-box-filtering/data/llama2_7b/jb_unif_behav_metadata.csv" \
-#     --save_path "/home/ubuntu/rowan/white-box-filtering/data/turkish/" \
-#     --tok_idxs -1 -2 -3 -4 -5  \
-#     --file_spec "jb_unif_behav_"
-
+# TURKISH
 # python get_activations.py \
 #     --model_name "akdeniz27/llama-2-7b-hf-qlora-dolly15k-turkish" \
 #     --dataset_name_or_path "../data/turkish/harmless_behaviors_custom.csv" \
 #     --save_path "../data/turkish/" \
 #     --tok_idxs -1 -2 -3 -4 -5  \
 #     --file_spec "harmless_behaviors_custom_"
+
+# DUTCH
+# python get_activations.py \
+#     --model_name "llama2_7b_dutch" \
+#     --dataset_name_or_path "../data/dutch/harmful_behaviors_custom_metadata.csv" \
+#     --save_path "../data/dutch/" \
+#     --tok_idxs -1 -2 -3 -4 -5  \
+#     --file_spec "harmful_behaviors_custom_"
+
+# HUNGARIAN
+# python get_activations.py \
+#     --model_name "llama2_7b_hungarian" \
+#     --dataset_name_or_path "../data/hungarian/harmful_behaviors_custom_metadata.csv" \
+#     --save_path "../data/hungarian/" \
+#     --tok_idxs -1 -2 -3 -4 -5  \
+#     --file_spec "harmful_behaviors_custom_"
+
+# HUNGARIAN
+python get_activations.py \
+    --model_name "llama2_7b_slovenian" \
+    --dataset_name_or_path "../data/slovenian/harmless_behaviors_custom_metadata.csv" \
+    --save_path "../data/slovenian/" \
+    --tok_idxs -1 -2 -3 -4 -5  \
+    --file_spec "harmless_behaviors_custom_"

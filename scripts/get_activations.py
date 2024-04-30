@@ -68,7 +68,8 @@ def get_mw(args):
         model_config = MODEL_CONFIGS[args.model_name]
         model, tokenizer = load_model_and_tokenizer(**model_config, device=args.device)
         if args.model_name == 'llama2_7b_dutch': 
-            tokenizer.pad_token = 18610
+            tokenizer.pad_token = '***'
+            print(tokenizer(tokenizer.pad_token))
             model.config.pad_token_id = 18610
     elif args.model_name in LORA_MODELS: 
         assert args.device == 'cuda', "LoRA models only work on cuda"

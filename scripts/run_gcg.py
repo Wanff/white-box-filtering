@@ -145,8 +145,8 @@ if __name__=="__main__":
                                gcg_loss_weight = args.gcg_loss_weight,
                                monitor_loss_weight = args.monitor_loss_weight,
                                use_search_width_sched = args.use_search_width_sched)
-        print(row['goal'])
-        print(row['target'])
+        print('GOAL: ' + row['goal'])
+        print('TARGET: ' + row['target'])
         
         attack_res = run(mw, messages = row['goal'], target = row['target'], monitor = monitor, config = gcg_config)
         results.append(attack_res)
