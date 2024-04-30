@@ -16,7 +16,7 @@ from ..monitor import Monitor, ActMonitor, TextMonitor
 @dataclass
 class GCGConfig:
     num_steps: int = 75
-    optim_str_init: str = "! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !"
+    optim_str_init: str = "! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! "
     search_width: int = 512
     topk: int = 256
     n_replace: int = 1
@@ -159,10 +159,10 @@ def compute_candidates_loss(
             the token ids of the target sequence 
     """
     all_loss = []
-    
     for i in range(0, input_embeds.shape[0], search_batch_size):
         with torch.no_grad():
             input_embeds_batch = input_embeds[i:i+search_batch_size]
+            sampled_ids_batch = sampled_ids[i:i+search_batch_size]
             current_batch_size = input_embeds_batch.shape[0]
 
             kv_cache_batch = []
@@ -187,7 +187,7 @@ def compute_candidates_loss(
                             return_prompt_acts = False,
                             device = model.device)
                 elif isinstance(monitor, TextMonitor):
-                    monitor_input = monitor.get_monitor_input(sampled_ids)
+                    monitor_input = torch.cat([sampled_ids_batch, monitor.after_ids.repeat(search_batch_size, 1)], dim=1)
             
                 monitor_loss = monitor.get_loss_no_grad(monitor_input)
                 
@@ -285,6 +285,9 @@ def run(
 
         if monitor is not None and isinstance(monitor, TextMonitor): 
             monitor.set_kv_cache(messages[0]["content"])
+            
+            monitor.after_embeds = monitor.model.get_input_embeddings()(monitor.after_ids)
+
     
     optim_ids = mw.tokenizer(config.optim_str_init, return_tensors="pt", add_special_tokens=False)["input_ids"].to(mw.model.device)
     
@@ -343,11 +346,9 @@ def run(
                 monitor_loss = monitor.get_loss(monitor_input)
                 del monitor_input
             elif isinstance(monitor, TextMonitor):
-
-                monitor_input_embeds = torch.cat([optim_embeds, after_embeds], dim=1)
+                monitor_input_embeds = torch.cat([optim_embeds, monitor.after_embeds], dim=1)
                 monitor_loss = monitor.get_loss(monitor_input_embeds)
             
-            print(monitor_loss)
             del output
             clear_gpus()
         else:

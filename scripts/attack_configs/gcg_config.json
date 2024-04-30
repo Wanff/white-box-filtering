@@ -1,6 +1,6 @@
 {
     "num_steps": 500,
-    "optim_str_init": "! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !",
+    "optim_str_init": "! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !",
     "search_width": 48,
     "topk": 256,
     "n_replace": 16,

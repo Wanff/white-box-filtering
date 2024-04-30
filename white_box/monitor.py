@@ -31,40 +31,50 @@ class TextMonitor(Monitor):
         self.model_type = model_type
         
     def set_kv_cache(self, goal_str : str): 
+        inst_idx = 831
         chat = [{"role": "user", "content": ""}]
         input_ids = self.tokenizer.apply_chat_template(chat, return_tensors="pt").to(self.model.device) 
-        goal_ids = self.tokenizer(goal_str, return_tensors="pt").input_ids.to(self.model.device)
-        pre_instruction_ids = torch.cat([input_ids[:, :827], goal_ids], dim=1)
-        print(pre_instruction_ids.shape)
+        goal_ids = self.tokenizer(goal_str, return_tensors="pt").input_ids.to(self.model.device)[:, 1:] #the indexing is to get rid of the <s> token
+        pre_instruction_ids = torch.cat([input_ids[:, :inst_idx], goal_ids], dim=1)
 
-        self.after_str = self.tokenizer.decode(input_ids[:,827:])
+        self.after_ids = input_ids[:,inst_idx:]
+        self.after_str = self.tokenizer.decode(input_ids[0,inst_idx:])
+
         print(self.tokenizer.decode(pre_instruction_ids[0]))
-
         print("BEGIN AFTER")
         print(self.after_str)
-        raise Exception
+
         with torch.no_grad():
             output = self.model(pre_instruction_ids, use_cache=True)
             self.kv_cache = output.past_key_values
 
-    def _predict_proba(self, prompt : str):
-        chat = [{"role": "user", "content": prompt}]
-        input_ids = self.tokenizer.apply_chat_template(chat, return_tensors="pt").to(self.model.device)
+    def _predict_proba(self, input_ids : torch.Tensor):
+        """This function assumes you're already using a kvcache that has the llamaguard instruction string set
+        """
+        # chat = [{"role": "user", "content": prompt}]
+        # input_ids = self.tokenizer.apply_chat_template(chat, return_tensors="pt").to(self.model.device)
         
-        if self.model_type == 'causal_lm':
-            output = self.model.generate(input_ids=input_ids, max_new_tokens=5,
-                                     output_scores = True, 
-                                     past_key_values = self.kv_cache if self.kv_cache is not None else None,
-                                     return_dict_in_generate = True, 
-                                     pad_token_id=0)
-            proba = torch.softmax(output['scores'][0], dim = 1)[:, self.score_id].squeeze()
-        elif self.model_type == 'sequence_classification':
-            output = self.model(input_ids, past_key_values = self.kv_cache if self.kv_cache is not None else None)
-            proba = output.logits.softmax(dim=-1)[0,1]
+        batch_size = input_ids.shape[0]
+        if self.kv_cache is not None:
+            kv_cache_batch = []
+            for i in range(len(self.kv_cache)):
+                kv_cache_batch.append([])
+                for j in range(len(self.kv_cache[i])):
+                    kv_cache_batch[i].append(self.kv_cache[i][j].expand(batch_size, -1, -1, -1))
+                    
+            if self.model_type == 'causal_lm':
+                output = self.model(input_ids=input_ids,
+                                    past_key_values = kv_cache_batch)
+                proba = output.logits.softmax(dim = -1)[:, -1, self.score_id]
+            elif self.model_type == 'sequence_classification':
+                output = self.model(input_ids, past_key_values = kv_cache_batch)
+                proba = output.logits.softmax(dim=-1)[:,1]
         
         return proba
 
     def _predict_proba_from_embeds(self, embeds: torch.Tensor): 
+        #this function does not take in batched embeds
+        
         if self.model_type == 'causal_lm': 
             output = self.model(inputs_embeds=embeds,
                                         past_key_values=self.kv_cache if self.kv_cache is not None else None)
@@ -75,23 +85,11 @@ class TextMonitor(Monitor):
         
         return proba
     
-    def predict_proba(self, prompts : Union[str, List[str]]):
-        if isinstance(prompts, str):
-            return self._predict_proba(prompts)
-        else:
-            probas =  []
-            for prompt in prompts:
-                probas.append(self._predict_proba(prompt))
-
-            return torch.tensor(probas, device = self.model.device)
-    
     def get_loss(self, embeds : torch.Tensor): 
         return self._predict_proba_from_embeds(embeds)
 
-    def get_loss_no_grad(self, prompt : str):
-        return self.predict_proba(prompt)
-
-
+    def get_loss_no_grad(self, input_ids : torch.Tensor):
+        return self._predict_proba(input_ids)
     
 class ActMonitor():
     def __init__(self, probe : Probe, layer : int, tok_idxs : List[int], monitor_type : str = "input"):
