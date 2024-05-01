@@ -349,6 +349,7 @@ def run(
                 monitor_input_embeds = torch.cat([optim_embeds, monitor.after_embeds], dim=1)
                 monitor_loss = monitor.get_loss(monitor_input_embeds)
             
+            print(monitor_loss)
             del output
             clear_gpus()
         else:

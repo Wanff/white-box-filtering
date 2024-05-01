@@ -1,10 +1,11 @@
 import sys 
 sys.path.append('../')
 
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, Trainer, TrainingArguments, set_seed, AutoModelForCausalLM, DataCollatorWithPadding
+from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments, set_seed, AutoModelForCausalLM, DataCollatorWithPadding
 from transformers import default_data_collator, get_linear_schedule_with_warmup, Adafactor
 import torch
 from torch.utils.data import DataLoader
+import torch.nn.functional as F
 import os
 import numpy as np
 from tqdm import tqdm
@@ -21,7 +22,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 def main(args):
 
     # load model
-    model = AutoModelForSequenceClassification.from_pretrained(args.model_name, num_labels=2)
+    model = AutoModelForCausalLM.from_pretrained(args.model_name, torch_dtype = torch.bfloat16)
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     tokenizer.pad_token = tokenizer.eos_token
     model.config.pad_token_id = tokenizer.eos_token_id
@@ -54,7 +55,7 @@ def main(args):
         lora_alpha=16,
         lora_dropout=0.1,
         bias="none",
-        task_type=TaskType.SEQ_CLS,
+        task_type=TaskType.CAUSAL_LM, 
     )
     model = get_peft_model(model, peft_config)
     model.print_trainable_parameters()
@@ -77,8 +78,9 @@ def main(args):
             if step == 0: 
                 print(batch['input_ids'].shape, batch['labels'].shape)
                 print(tokenizer.decode(batch['input_ids'][0]))
-            outputs = model(**batch)
-            loss = outputs.loss
+            outputs = model(batch['input_ids']) # b,s,v
+            preds = torch.stack([outputs.logits[:,-1, 9109], outputs.logits[:,-1, 25110]], dim=1).softmax(-1)
+            loss = F.cross_entropy(preds, batch['labels'])
             total_loss += loss.detach().float()
             loss.backward()
             optimizer.step()
@@ -97,9 +99,10 @@ def main(args):
                 model.eval()
                 for step, batch in enumerate(test_dataloader):
                     batch = {k: v.to(args.device) for k, v in batch.items()}
-                    outputs = model(**batch)
-                    loss = outputs.loss
-                    preds = torch.argmax(outputs.logits, dim=1)
+                    outputs = model(batch['input_ids'])
+                    preds = torch.stack([outputs.logits[:,-1, 9109], outputs.logits[:,-1, 25110]], dim=1).softmax(-1)
+                    loss = F.cross_entropy(preds, batch['labels'])
+                    preds = preds.argmax(-1)
                     acc += torch.sum(preds == batch['labels'])
                     total_loss += loss.detach().float()
 
@@ -109,8 +112,8 @@ def main(args):
             
                     pbar.set_description(f"Step {step} | Loss: {loss}")
             
-                test_epoch_loss = total_loss / len(test_dataloader)
-                test_acc = acc / len(test_dataloader)
+                test_epoch_loss = total_loss / (len(test_dataloader) * args.batch_size)
+                test_acc = acc / (len(test_dataloader) * args.batch_size)
                 print(f"{epoch} | Test Loss: {test_epoch_loss} | Test Acc: {test_acc}")
 
         train_epoch_loss = total_loss / len(train_dataloader)
@@ -122,11 +125,11 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_name', type=str, default='meta-llama/LlamaGuard-7b')
-    parser.add_argument('--path', type=str, default='/home/ubuntu/rowan/white-box-filtering/data/llama2_7b')
+    parser.add_argument('--path', type=str, default='../data/llama2_7b')
     parser.add_argument('--file_spec', type=str, default='harmbench_alpaca_')
     parser.add_argument('--seed', type=int, default=0, help='seed')
     parser.add_argument('--lr', type=float, default=1e-5, help='learning rate')
-    parser.add_argument('--batch_size', type=int, default=1, help='batch size per device')
+    parser.add_argument('--batch_size', type=int, default=2, help='batch size per device')
     parser.add_argument('--num_epochs', type=int, default=4, help='number of epochs')
     parser.add_argument('--device', type=str, default='cuda', help='device')
     args = parser.parse_args()
