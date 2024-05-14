@@ -56,10 +56,12 @@ def parse_args():
                         help="string appended to saved acts")
     parser.add_argument("--probe_type", type = str, default = "sk",
                         help="type of probe")
-    parser.add_argument("--tok_idxs", nargs="+", default = None,
+    parser.add_argument("--tok_idxs", nargs="+", default = [-1, -2, -3, -4, -5],
                         help="tok_idxs")
-    parser.add_argument("--probe_data_path", type = str, default = "jb_",
+    
+    parser.add_argument("--probe_data_path", type = str, default = "../data/llama2_7b/jb_",
                         help="file spec for the acts/metadata used to train the probe")
+    
     parser.add_argument("--probe_reg", type = float, default = 1e-2,
                         help="regularization for the probe")
     parser.add_argument("--max_iter", type = int, default = 2000,
@@ -95,7 +97,8 @@ if __name__=="__main__":
         elif args.probe_type == "mm":
             acc, auc, probe = probe_dataset.train_mm_probe(layer, tok_idxs=list(range(5)), test_size=None)
         elif args.probe_type == "mlp":
-            acc, auc, probe = probe_dataset.train_mlp_probe(layer, tok_idxs=list(range(5)), test_size=None)
+            acc, auc, probe = probe_dataset.train_mlp_probe(layer, tok_idxs=list(range(5)), test_size=None,
+                                                            weight_decay = 1, lr = 0.0001, epochs = 5000)
         print(acc, auc)
         
         if args.monitor_type == "act_rand":

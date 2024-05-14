@@ -13,7 +13,7 @@ from .utils import insert_adv_string, schedule_n_to_change_fixed, schedule_n_to_
 
 def score_fn(monitor_loss, log_prob_loss, score_type : str = "both"):
     if score_type == "both":
-        return -3*monitor_loss + log_prob_loss
+        return -5*monitor_loss + log_prob_loss
     elif score_type == "monitor":
         return -monitor_loss
     elif score_type == "log_prob":

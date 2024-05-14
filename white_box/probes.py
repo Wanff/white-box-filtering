@@ -43,6 +43,13 @@ class MLP(t.nn.Module, Probe):
         )
     
     def forward(self, x):
+        if x.dtype != t.float32:
+            x = x.float()
+        
+        if x.device != self.net[0].weight.data.device:
+            # print("Moving data to device")
+            x = x.to(self.net[0].weight.data.device)
+            
         return self.net(x).squeeze(-1)
     
     def predict(self, x):
@@ -51,12 +58,12 @@ class MLP(t.nn.Module, Probe):
     def predict_proba(self, x):
         return self(x)
     
-    def from_data(acts, labels, lr=0.001, weight_decay=0.1, epochs=1000, device='cpu'):
+    def from_data(acts, labels, lr=0.001, weight_decay=0.1, epochs=1000, device='cuda'):
         acts, labels = acts.to(device), labels.to(device)
-        probe = MLP(acts.shape[-1], 1, 32, 2).to(device)
+        probe = MLP(acts.shape[-1], 1, 32, 2, use_bias = True).to(device)
         
         opt = t.optim.AdamW(probe.parameters(), lr=lr, weight_decay=weight_decay)
-        for _ in tqdm(range(epochs)):
+        for _ in range(epochs):
             opt.zero_grad()
             loss = t.nn.BCELoss()(probe(acts), labels)
             loss.backward()
@@ -120,13 +127,7 @@ class LRProbe(t.nn.Module, Probe):
             t.nn.Sigmoid()
         )
 
-    def forward(self, x, iid=None):
-        return self.net(x).squeeze(-1)
-
-    def predict(self, x, iid=None):
-        return self.predict_proba(x).round()
-    
-    def predict_proba(self, x, iid=None):
+    def forward(self, x):
         if x.dtype != t.float32:
             x = x.float()
         
@@ -134,6 +135,12 @@ class LRProbe(t.nn.Module, Probe):
             # print("Moving data to device")
             x = x.to(self.net[0].weight.data.device)
             
+        return self.net(x).squeeze(-1)
+
+    def predict(self, x):
+        return self.predict_proba(x).round()
+    
+    def predict_proba(self, x):
         return self(x)
     
     def from_data(acts, labels, lr=0.001, weight_decay=0.1, epochs=1000, use_bias=False, device='cpu'):

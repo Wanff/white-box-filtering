@@ -442,9 +442,12 @@ class ProbeDataset():
 
     def train_mlp_probe(self, layer : int, tok_idxs : List[int],
                             test_size = 0.2, 
-                            device='cpu',
+                            device='cuda',
                             random_state = 0,
                             use_train_test_split = True,
+                            lr : float = 0.001, 
+                            weight_decay : float = 0.1,
+                            epochs : int = 1000,
                        ):
         #TODO: FIX
         if use_train_test_split:
@@ -452,10 +455,9 @@ class ProbeDataset():
         else:
             y_train, X_train = self.act_dataset.convert_states(self.act_dataset.X, self.act_dataset.y, tok_idxs = tok_idxs, layer = layer)
             X_val, y_val = X_train, y_train        
-        probe = MLP.from_data(X_train.float().to(device), y_train.float().to(device), device=device)
-
-        # center val data
-        X_val = X_val - X_val.mean(0)
+        probe = MLP.from_data(X_train.float(), y_train.float(),  
+                              lr = lr, weight_decay = weight_decay, epochs = epochs, 
+                              device=device)
 
         acc = probe.get_probe_accuracy(X_val, y_val, device = device)
         auc = probe.get_probe_auc(X_val, y_val, device = device)
@@ -468,7 +470,7 @@ class ProbeDataset():
                        test_size = 0.2,
                        return_torch_probe : bool = True,
                        random_state : int = 0,
-                       device  = None,
+                       device  = "cuda",
                        use_train_test_split : bool = True
                         ): 
         if use_train_test_split:
