@@ -287,7 +287,7 @@ def run(
     # Remove the BOS token -- this will get added when tokenizing, if necessary
     if mw.tokenizer.bos_token and template.startswith(mw.tokenizer.bos_token):
         template = template.replace(mw.tokenizer.bos_token, "")
-    before_str, after_str = template.split("{optim_str}")
+    before_str, after_str = template.split(" {optim_str}")
     target = " " + target if config.add_space_before_target else target
     print(f"before, after, target : {before_str} | {after_str} | {target}")
         
@@ -307,8 +307,7 @@ def run(
         kv_cache = output.past_key_values
 
         if monitor is not None and isinstance(monitor, TextMonitor): 
-            monitor.set_kv_cache(messages[0]["content"])
-            
+            monitor.set_kv_cache(messages[-1]["content"])
             monitor.after_embeds = monitor.model.get_input_embeddings()(monitor.after_ids)
 
     optim_ids = mw.tokenizer(config.optim_str_init, return_tensors="pt", add_special_tokens=False)["input_ids"].to(mw.model.device)

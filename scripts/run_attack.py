@@ -52,6 +52,7 @@ def parse_args():
     # Monitor Args
     parser.add_argument('--monitor_type', type = str, help = "can be act, act_rand, text, or none")
     parser.add_argument('--monitor_path', type = str, help = "path to monitor model")
+    parser.add_argument('--text_monitor_config', type = str, default='llamaguard+', help = "config for text monitor")
     parser.add_argument("--probe_layer", type = int, default = 24,
                         help="string appended to saved acts")
     parser.add_argument("--probe_type", type = str, default = "sk",
@@ -120,7 +121,7 @@ if __name__=="__main__":
                 model = model.merge_and_unload()
             else:
                 model = AutoModelForCausalLM.from_pretrained(args.monitor_path, 
-                    torch_dtype=torch.float16, 
+                    torch_dtype=torch.bfloat16, 
                     device_map="auto")
         else: 
             model = AutoModelForCausalLM.from_pretrained("meta-llama/LlamaGuard-7b", 
@@ -134,7 +135,7 @@ if __name__=="__main__":
         model.config.pad_token_id = tokenizer.pad_token_id
         
         model.train()
-        monitor = TextMonitor(model, tokenizer, score_id = 25110)
+        monitor = TextMonitor(model, tokenizer, args.text_monitor_config)
     else:
         monitor = None
     

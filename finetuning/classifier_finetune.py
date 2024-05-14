@@ -9,7 +9,7 @@ import torch.nn.functional as F
 import os
 import numpy as np
 from tqdm import tqdm
-from white_box.chat_model_utils import load_model_and_tokenizer, get_template, MODEL_CONFIGS
+from white_box.chat_model_utils import load_model_and_tokenizer, get_template, MODEL_CONFIGS, _STR_DTYPE_TO_TORCH_DTYPE
 from datasets import load_from_disk, DatasetDict, load_dataset, Dataset
 import argparse
 from white_box.utils import rotation_cipher
@@ -22,9 +22,9 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 def main(args):
 
     # load model
-    model_config = MODEL_CONFIGS['llama2_7b']
-    model = AutoModelForCausalLM.from_pretrained(args.model_name, torch_dtype = torch.bfloat16)
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name, padding_side='right')
+    model_config = MODEL_CONFIGS[args.model_name]
+    model = AutoModelForCausalLM.from_pretrained(model_config['model_name_or_path'], torch_dtype=_STR_DTYPE_TO_TORCH_DTYPE[model_config['dtype']])
+    tokenizer = AutoTokenizer.from_pretrained(model_config['model_name_or_path'], padding_side='right')
     tokenizer.pad_token = tokenizer.eos_token
     model.config.pad_token_id = tokenizer.eos_token_id
     template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))['prompt']
@@ -33,7 +33,6 @@ def main(args):
     train_dataset = pd.read_csv(f'{args.path}/{args.file_spec}metadata.csv')
     test_dataset = pd.read_csv(f'{args.path}/{args.file_spec}test_metadata.csv')
     
-
     # hf dataset
     train_dataset = Dataset.from_pandas(train_dataset)
     test_dataset = Dataset.from_pandas(test_dataset)
@@ -42,9 +41,8 @@ def main(args):
         input_ids = []
         last_token_idxs = []
         for ex in examples: 
-            prompt = ex['prompt']
-            prompt = "<<SYS>>\nIs the following query requesting something harmful? Output your response. The first line must contain only 'safe' and 'unsafe'.\n<</SYS>>\n\n" + prompt
-            prompt = template.format(instruction=prompt)
+            instruction = ex['prompt']
+            prompt = template.format(instruction=instruction)
             input_ids.append(tokenizer(prompt)['input_ids'])
             last_token_idxs.append(len(input_ids[-1]) - 1)
         
@@ -131,19 +129,19 @@ def main(args):
         train_epoch_loss = total_loss / len(train_dataloader)
         print(f"{epoch} | Train Loss: {train_epoch_loss}")
          
-        model.save_pretrained(f'{args.path}/llamaguard_new_{args.file_spec}_model_{epoch}')
+        model.save_pretrained(f'{args.path}/{args.model_name}_{args.file_spec}_model_{epoch}')
         
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_name', type=str, default='meta-llama/LlamaGuard-7b', help='model name')
+    parser.add_argument('--model_name', type=str, default='llamaguard', help='model name')
     parser.add_argument('--path', type=str, default='../data/llama2_7b')
-    parser.add_argument('--file_spec', type=str, default='generated_')
+    parser.add_argument('--file_spec', type=str, default='harmbench_alpaca_')
     parser.add_argument('--seed', type=int, default=0, help='seed')
     parser.add_argument('--lr', type=float, default=1e-5, help='learning rate')
     parser.add_argument('--batch_size', type=int, default=1, help='batch size per device')
     parser.add_argument('--accumulation_steps', type=int, default=16, help='accumulation steps')
-    parser.add_argument('--num_epochs', type=int, default=4, help='number of epochs')
+    parser.add_argument('--num_epochs', type=int, default=3, help='number of epochs')
     parser.add_argument('--device', type=str, default='cuda', help='device')
     args = parser.parse_args()
 
