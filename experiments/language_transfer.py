@@ -84,8 +84,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='White-box language transfer')
     parser.add_argument('--orig_path', type=str, default='../data/llama2_7b/', help='Path to original data')
-    parser.add_argument('--data_path', type=str, default='../data/turkish/', help='Path to data')
-    parser.add_argument('--model_name', type=str, default='akdeniz27/llama-2-7b-hf-qlora-dolly15k-turkish', help='Model name')
+    parser.add_argument('--data_path', type=str, default='../data/slovenian/', help='Path to data')
     parser.add_argument('--probe_dataset', type=str, default='jb_', help='Probe dataset')
     parser.add_argument('--probe_type', type=str, default='sk', help='Probe type')
     parser.add_argument('--layer', type=int, default=24, help='Layer')

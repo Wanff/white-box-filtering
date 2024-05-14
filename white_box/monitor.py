@@ -18,8 +18,7 @@ class TextMonitor(Monitor):
     def __init__(self, model : AutoModelForCausalLM | AutoModelForSequenceClassification, tokenizer : AutoTokenizer, 
                  score_id : int,
                  use_kv_cache : bool = True,
-                 monitor_type : str = "input", 
-                 model_type : str = 'causal_lm'):
+                 monitor_type : str = "input"):
         #LLAMA Guard
         self.model = model
         self.tokenizer = tokenizer
@@ -28,7 +27,6 @@ class TextMonitor(Monitor):
         self.before_str = None
         self.after_str = None 
         self.monitor_type = monitor_type
-        self.model_type = model_type
         
     def set_kv_cache(self, goal_str : str): 
         inst_idx = 831
@@ -62,31 +60,25 @@ class TextMonitor(Monitor):
                 for j in range(len(self.kv_cache[i])):
                     kv_cache_batch[i].append(self.kv_cache[i][j].expand(batch_size, -1, -1, -1))
                     
-            if self.model_type == 'causal_lm':
-                output = self.model(input_ids=input_ids,
-                                    past_key_values = kv_cache_batch)
-                proba = output.logits.softmax(dim = -1)[:, -1, self.score_id]
-            elif self.model_type == 'sequence_classification':
-                output = self.model(input_ids, past_key_values = kv_cache_batch)
-                proba = output.logits.softmax(dim=-1)[:,1]
-        
+            output = self.model(input_ids=input_ids,
+                                past_key_values = kv_cache_batch)
+            proba = torch.stack([output.logits[:,-1, 9109], output.logits[:,-1, 25110]], dim=1).softmax(-1)
+            proba = proba[:,1]
+    
         return proba
 
     def _predict_proba_from_embeds(self, embeds: torch.Tensor): 
         #this function does not take in batched embeds
         
-        if self.model_type == 'causal_lm': 
-            output = self.model(inputs_embeds=embeds,
-                                        past_key_values=self.kv_cache if self.kv_cache is not None else None)
-            proba = output.logits.softmax(-1)[:,-1,self.score_id].squeeze()
-        elif self.model_type == 'sequence_classification': 
-            output = self.model(inputs_embeds=embeds, past_key_values = self.kv_cache if self.kv_cache is not None else None)
-            proba = output.logits.softmax(dim=-1)[0,1]
+        output = self.model(inputs_embeds=embeds,
+                                    past_key_values=self.kv_cache if self.kv_cache is not None else None)
+        proba = torch.stack([output.logits[:,-1, 9109], output.logits[:,-1, 25110]], dim=1).softmax(-1)
+        proba = proba[0,1]
         
         return proba
     
     def get_loss(self, embeds : torch.Tensor): 
-        return self._predict_proba_from_embeds(embeds)
+        return self._predict_proba_from_embeds(embeds.type(self.model.dtype))
 
     def get_loss_no_grad(self, input_ids : torch.Tensor):
         return self._predict_proba(input_ids)

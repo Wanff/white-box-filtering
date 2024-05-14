@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import argparse 
 import json
-from peft import AutoPeftModelForSequenceClassification
+from peft import AutoPeftModelForSequenceClassification, AutoPeftModelForCausalLM
 
 import sys
 sys.path.append('../') 
@@ -30,8 +30,8 @@ from white_box.monitor import ActMonitor, TextMonitor
 from white_box.attacks.gcg import GCGConfig
 
 from white_box.attacks.gcg import run as run_gcg
-from white_box.attacks.pair import run as run_pair
-from white_box.attacks.log_prob_attack import run as run_log_prob
+# from white_box.attacks.pair import run_pair
+# from white_box.attacks.log_prob_attack import run as run_log_prob
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -78,7 +78,7 @@ if __name__=="__main__":
         torch.manual_seed(args.seed)
         np.random.seed(args.seed)
     
-    if "act" in args.monitor_type:
+    if args.monitor_type == 'act': 
         layer = args.probe_layer
         # if last 3 are 'jb_'
         if args.probe_data_path[-3:] == 'jb_':
@@ -93,7 +93,7 @@ if __name__=="__main__":
         probe_dataset = ProbeDataset(dataset)
 
         if args.probe_type == "sk":
-            acc, auc, probe = probe_dataset.train_sk_probe(layer, tok_idxs = list(range(5)), test_size = None, C = args.probe_reg, max_iter = args.max_iter, use_train_test_split=False)
+            acc, auc, probe = probe_dataset.train_sk_probe(layer, tok_idxs = list(range(5)), test_size = None, C = args.probe_reg, max_iter = args.max_iter, use_train_test_split=False, device='cuda')
         elif args.probe_type == "mm":
             acc, auc, probe = probe_dataset.train_mm_probe(layer, tok_idxs=list(range(5)), test_size=None)
         elif args.probe_type == "mlp":
@@ -113,8 +113,8 @@ if __name__=="__main__":
         monitor = ActMonitor(probe = probe, layer = layer, tok_idxs = [int(i) for i in args.tok_idxs])
     elif args.monitor_type == "text":
         if args.monitor_path is not None: 
-            print("ASSUMING AUTO MODEL FOR SEQUENCE CLASSIFICATION")
-            model = AutoPeftModelForSequenceClassification.from_pretrained(args.monitor_path, 
+            print("ASSUMING PEFT MODEL")
+            model = AutoPeftModelForCausalLM.from_pretrained(args.monitor_path, 
                 torch_dtype=torch.float16, 
                 device_map="auto")
             model = model.merge_and_unload()
@@ -126,11 +126,11 @@ if __name__=="__main__":
             "meta-llama/LlamaGuard-7b",
             use_fast=False,
             padding_side="left")
+        tokenizer.pad_token = tokenizer.eos_token
+        model.config.pad_token_id = tokenizer.pad_token_id
         
-        model_type = 'sequence_classification' if args.monitor_path is not None else 'causal_lm'
-        print(model_type)
         model.train()
-        monitor = TextMonitor(model, tokenizer, score_id = 25110, model_type=model_type)
+        monitor = TextMonitor(model, tokenizer, score_id = 25110)
     else:
         monitor = None
     
@@ -159,6 +159,8 @@ if __name__=="__main__":
     else:
         raise ValueError(f"attack_type {args.attack_type} not recognized")
     
+    advbench_behaviors = advbench_behaviors.sample(frac=1, random_state = args.seed)
+
     for i, row in list(advbench_behaviors.iterrows()):
         print(row['goal'])
         print(row['target'])
