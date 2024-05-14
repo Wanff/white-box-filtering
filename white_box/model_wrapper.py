@@ -533,8 +533,8 @@ class ModelWrapper(torch.nn.Module):
             if self.tokenizer.padding_side == "left":
                 hidden_states =  hidden_states[:, tok_idxs, :]
             elif self.tokenizer.padding_side == "right":
-                print(torch.arange(hidden_states.shape[0]))
-                print(tok_idxs)
+                # print(torch.arange(hidden_states.shape[0]))
+                # print(tok_idxs)
                 hidden_states =  hidden_states[torch.arange(hidden_states.shape[0]), tok_idxs, :]
                 
             # hidden_states_layers[layer] = hidden_states.cpu().to(dtype=torch.float32).detach().numpy()

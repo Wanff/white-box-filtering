@@ -20,7 +20,6 @@ from peft import get_peft_model, LoraConfig, TaskType
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 def main(args):
-
     # load model
     model_config = MODEL_CONFIGS['llama2_7b']
     model = AutoModelForCausalLM.from_pretrained(args.model_name, torch_dtype = torch.bfloat16)
@@ -33,7 +32,6 @@ def main(args):
     train_dataset = pd.read_csv(f'{args.path}/{args.file_spec}metadata.csv')
     test_dataset = pd.read_csv(f'{args.path}/{args.file_spec}test_metadata.csv')
     
-
     # hf dataset
     train_dataset = Dataset.from_pandas(train_dataset)
     test_dataset = Dataset.from_pandas(test_dataset)

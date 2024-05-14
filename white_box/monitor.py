@@ -124,9 +124,9 @@ class ActMonitor():
 
     def get_loss(self, acts : torch.tensor):
         if len(self.tok_idxs) > 1:
-            return self.predict_proba(acts.float()).mean(dim = -1)
+            return self.predict_proba(acts).mean(dim = -1)
         else:
-            return self.predict_proba(acts.float())
+            return self.predict_proba(acts).squeeze()
 
     def get_loss_no_grad(self, acts : torch.Tensor): 
         return self.get_loss(acts)

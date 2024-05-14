@@ -17,13 +17,13 @@ class Probe:
         raise NotImplementedError
 
     def get_probe_accuracy(self, X_test, y_test, device='cpu'):
-        preds = self.predict(X_test.to(device))
+        preds = self.predict(X_test)
 
-        accuracy = (preds.detach() == y_test.detach().to(device)).float().mean().item()
+        accuracy = (preds.detach().to(device) == y_test.detach().to(device)).float().mean().item()
         return accuracy
 
     def get_probe_auc(self, X_test, y_test, device='cpu'):
-        preds = self.predict_proba(X_test.to(device))
+        preds = self.predict_proba(X_test)
         
         auc = roc_auc_score(y_test.detach().cpu().numpy(), preds.detach().cpu().numpy())
         return auc

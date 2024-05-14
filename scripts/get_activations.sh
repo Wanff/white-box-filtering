@@ -21,11 +21,11 @@
 
 python get_activations.py \
     --model_name "llama2_7b" \
-    --dataset_name_or_path "../data/llama2_7b/jb_metadata.csv" \
+    --dataset_name_or_path "../data/llama2_7b/all_gpt_gen_metadata.csv" \
     --save_path "../data/llama2_7b/" \
     --tok_idxs -1 -2 -3 -4 -5  \
     --padding_side "right" \
-    --file_spec "jb_right_" &> ../data/llama2_7b/jb_right.out &
+    --file_spec "all_gpt_gen_" &> ../data/llama2_7b/all_gpt_gen.out &
 
 #* MISTRAL
 # python get_activations.py \

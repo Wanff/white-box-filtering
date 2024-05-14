@@ -9,7 +9,7 @@ from white_box.dataset import PromptDist, ActDataset, create_prompt_dist_from_me
 
 #* EXPERIMENTS
 # Leave-one-out generalization
-def leave_one_out_generalization(jb_metadata : pd.DataFrame, split : str = "category"):
+def leave_one_out_generalization_by_jb_success(jb_metadata : pd.DataFrame, split : str = "category"):
     if split == "category":
         probe_data_path = "../data/llama2_7b/jb_eq_by_cat_"
         all_categories = set(jb_metadata['category'].values.tolist()) - {'harmless'}

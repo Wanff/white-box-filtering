@@ -193,7 +193,6 @@ def compute_candidates_loss(
                     monitor_input = torch.cat([sampled_ids_batch, monitor.after_ids.repeat(search_batch_size, 1)], dim=1)
             
                 monitor_loss = monitor.get_loss_no_grad(monitor_input)
-                
                 del monitor_input
                 clear_gpus()
             else:
