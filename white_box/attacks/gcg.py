@@ -3,6 +3,7 @@ import gc
 from tqdm import tqdm
 from typing import List, Union
 import heapq
+import numpy as np
 
 import torch
 import transformers
@@ -140,6 +141,8 @@ def compute_candidates_loss(
     kv_cache: tuple,
     input_embeds: Tensor, 
     target_ids: Tensor,
+    gcg_weight: float,
+    monitor_weight: float,
     monitor : Union[ActMonitor, TextMonitor] = None,
     sampled_ids: Tensor = None,
     config : GCGConfig = None,
@@ -196,11 +199,11 @@ def compute_candidates_loss(
             else:
                 monitor_loss = torch.tensor(0)
                 
-            gcg_loss = config.gcg_loss_weight * torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1), reduction="none") 
+            gcg_loss = torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1), reduction="none") 
             gcg_loss = gcg_loss.view(current_batch_size, -1).mean(dim=-1)
-            monitor_loss =  config.monitor_loss_weight * monitor_loss
+            monitor_loss =  monitor_loss
             
-            loss = gcg_loss + monitor_loss
+            loss = gcg_weight * gcg_loss + monitor_weight * monitor_loss
             all_loss.append(loss)
 
             del outputs
@@ -215,6 +218,26 @@ def gen_init_buffer_ids(mw : ModelWrapper, num_toks: int, num_seqs: int):
     init_buffer_ids = [punc_tok_ids[torch.multinomial(punc_tok_ids, num_toks, replacement = True)].unsqueeze(0).long() for _ in range(num_seqs)]
     
     return init_buffer_ids
+
+def step_loss_weights(gcg_weight, monitor_weight, total_steps):
+    size = 1/total_steps
+    if np.abs(gcg_weight - monitor_weight) < size:
+        gcg_weight, monitor_weight = 0.5, 0.5
+    if gcg_weight > monitor_weight:
+        gcg_weight -= size
+        monitor_weight += size
+    elif gcg_weight < monitor_weight:
+        gcg_weight += size
+        monitor_weight -= size
+    pre_softmax_gcg_weight, pre_softmax_monitor_weight = gcg_weight, monitor_weight
+    comb = torch.tensor([gcg_weight, monitor_weight])
+    comb = torch.nn.functional.softmax(comb / 0.1, dim=0)
+    gcg_weight = comb[0].item()
+    monitor_weight = comb[1].item()
+    return gcg_weight, monitor_weight, pre_softmax_gcg_weight, pre_softmax_monitor_weight
+
+def step_loss_weights(gcg_weight, monitor_weight, total_steps):
+    return gcg_weight, monitor_weight, gcg_weight, monitor_weight
     
 def run(
     mw : ModelWrapper,
@@ -298,11 +321,16 @@ def run(
             target_embeds.repeat(buffer_ids.shape[0], 1, 1)
         ], dim=1)    
         
+    gcg_weight, monitor_weight = config.gcg_loss_weight, config.monitor_loss_weight
+    pre_softmax_gcg_weight, pre_softmax_monitor_weight = gcg_weight, monitor_weight
+    
     loss = find_executable_batch_size(compute_candidates_loss, buffer_ids.shape[0])(
             mw.model,
             kv_cache,
             input_embeds,
             target_ids,
+            gcg_weight, 
+            monitor_weight,
             monitor, 
             sampled_ids = buffer_ids,
             config = config
@@ -359,7 +387,11 @@ def run(
         gcg_loss = torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
         
         model_preds = torch.argmax(shift_logits, dim=-1)
-        loss = config.gcg_loss_weight * gcg_loss + config.monitor_loss_weight * monitor_loss
+        gcg_weight, monitor_weight, pre_softmax_gcg_weight, pre_softmax_monitor_weight = step_loss_weights(pre_softmax_gcg_weight, pre_softmax_monitor_weight, config.num_steps)
+
+        print(f'Pre softmax GCG weight: {pre_softmax_gcg_weight}, Pre softmax Monitor weight: {pre_softmax_monitor_weight}')
+        print(f'GCG weight: {gcg_weight}, Monitor weight: {monitor_weight}')
+        loss = gcg_weight * gcg_loss + monitor_weight * monitor_loss
         
         print(f"model preds : {mw.tokenizer.decode(model_preds.squeeze(0))}")
         print(f"monitor_loss : {monitor_loss.item()} | gcg_loss : {gcg_loss} |  loss : {loss.item()} | search_width : {search_width_sched(buffer.n_repeat)} | n_replace : {n_replace_sched(i)}")
@@ -371,24 +403,11 @@ def run(
         gcg_condition = model_preds.eq(shift_labels).all() 
         monitor_condition = (monitor_loss < 0.5) 
         
-        if config.gcg_loss_weight == 0:
-            if monitor_condition:
-                print("Early Stopping Condition Met")
-                early_stopping_condition.append(1)
-            else:
-                early_stopping_condition.append(0)
-        elif config.monitor_loss_weight == 0:
-            if gcg_condition:
-                print("Early Stopping Condition Met")
-                early_stopping_condition.append(1)
-            else:
-                early_stopping_condition.append(0)
-        elif config.monitor_loss_weight > 0 and config.gcg_loss_weight > 0:
-            if gcg_condition and monitor_condition:
-                print("Early Stopping Condition Met")
-                early_stopping_condition.append(1)
-            else:
-                early_stopping_condition.append(0)
+        if gcg_condition and monitor_condition:
+            print("Early Stopping Condition Met")
+            early_stopping_condition.append(1)
+        else:
+            early_stopping_condition.append(0)
   
         optim_ids_onehot_grad = torch.autograd.grad(outputs=[loss], inputs=[optim_ids_onehot])[0]
 
@@ -425,6 +444,8 @@ def run(
             kv_cache,
             input_embeds,
             target_ids,
+            gcg_weight, 
+            monitor_weight, 
             monitor,
             config = config,
             sampled_ids = sampled_ids,
