@@ -371,7 +371,7 @@ class ModelWrapper(torch.nn.Module):
         if isinstance(prompts[0], str):
             if self.template is not None and use_chat_template:
                 prompts = [self.template.format(instruction=s) for s in prompts]
-            inputs = self.tokenizer(prompts, return_tensors="pt", padding=True, max_length=512, truncation=True)
+            inputs = self.tokenizer(prompts, return_tensors="pt", padding=True, max_length=2048, truncation=True)
         else:
             inputs = self.tokenizer.pad({'input_ids': prompts}, padding = True, return_attention_mask=True)
         
@@ -416,15 +416,27 @@ class ModelWrapper(torch.nn.Module):
             
                 input_ids, attention_mask = self.process_prompts(batched_prompts, use_chat_template = use_chat_template)
                 outputs = self.model(input_ids = input_ids, attention_mask=attention_mask, output_hidden_states = True, **kwargs)
-
+                
+                #if padding_side==left, tok_idxs is neg, one dimensional, and relative to the end of the sequence
+                #if padding_side==right, tok_idxs is pos, two dimensional (batch x tok_pos), and relative to the start of the sequence
+                if self.tokenizer.padding_side == "right":
+                    #* we're assuming that tok_idxs is negative
+                    batch_last_tok_idxs = (torch.sum(attention_mask, dim = 1, keepdim = True) - 1).to("cpu")
+                    batch_tok_idxs = batch_last_tok_idxs.repeat(1, len(tok_idxs)) + torch.tensor(tok_idxs).repeat(len(batched_prompts), 1) + 1
+                else:
+                    batch_tok_idxs = tok_idxs
+                    
                 for act_type in return_types:
                     if act_type == 'resid':
-                        hidden_states_dict['resid'].append(self._get_hidden_states(outputs, tok_idxs, layers, 'residual'))
+                        hidden_states_dict['resid'].append(self._get_hidden_states(outputs, batch_tok_idxs, layers, 'residual'))
                     else:
                         assert act_type in self.universal_b_name_map.keys(), f"Unknown activation type {act_type}." 
                         acts_dict = self.get_activations(layers, self.universal_b_name_map[act_type])
                         for layer in layers:
-                            acts_dict[layer] = acts_dict[layer][:, tok_idxs, :]
+                            if self.tokenizer.padding_side == "left":
+                                acts_dict[layer] = acts_dict[layer][:, batch_tok_idxs, :]
+                            else:
+                                acts_dict[layer] = acts_dict[layer][torch.arange(acts_dict[layer].shape[0]), batch_tok_idxs, :] #untested
                         
                         hidden_states_dict[act_type].append(torch.stack([acts_dict[layer] for layer in acts_dict.keys()]))
                 
@@ -439,7 +451,6 @@ class ModelWrapper(torch.nn.Module):
         @find_executable_batch_size(starting_batch_size=len(prompts))
         def inner_loop(batch_size):
             return _inner_loop(batch_size)
-        
         try:
             return inner_loop()
         except:
@@ -517,8 +528,15 @@ class ModelWrapper(torch.nn.Module):
         hidden_states_layers = {}
         for layer in hidden_layers:
             layer = layer + 1 #we do this because usually we 0-index layers, but hf does not bc it includes the embedding
-            hidden_states = outputs['hidden_states'][layer]
-            hidden_states =  hidden_states[:, tok_idxs, :]
+            hidden_states = outputs['hidden_states'][layer] #tuple where layer is tuple
+            
+            if self.tokenizer.padding_side == "left":
+                hidden_states =  hidden_states[:, tok_idxs, :]
+            elif self.tokenizer.padding_side == "right":
+                print(torch.arange(hidden_states.shape[0]))
+                print(tok_idxs)
+                hidden_states =  hidden_states[torch.arange(hidden_states.shape[0]), tok_idxs, :]
+                
             # hidden_states_layers[layer] = hidden_states.cpu().to(dtype=torch.float32).detach().numpy()
             hidden_states_layers[layer - 1] = hidden_states.detach().cpu().to(dtype = torch.float32)
         

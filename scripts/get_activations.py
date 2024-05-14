@@ -39,6 +39,8 @@ def parse_args():
                         help="Use the question/n/nAnswer: format instead of fast chat. ")
     parser.add_argument('--device', type=str, default='cuda', 
                         help='Device to run the model on')
+    parser.add_argument('--padding_side', type=str, default='left', 
+                        help='padding side for tokenizer')
 
     # Activation saving arguments
     parser.add_argument("--act_types", nargs="+", default = ['resid'],
@@ -66,7 +68,7 @@ def parse_args():
 def get_mw(args): 
     if args.model_name in MODEL_CONFIGS: # for chat_models
         model_config = MODEL_CONFIGS[args.model_name]
-        model, tokenizer = load_model_and_tokenizer(**model_config, device=args.device)
+        model, tokenizer = load_model_and_tokenizer(**model_config, device=args.device, padding_side = args.padding_side)
         if args.model_name == 'llama2_7b_dutch': 
             tokenizer.pad_token = '***'
             print(tokenizer(tokenizer.pad_token))
@@ -80,12 +82,12 @@ def get_mw(args):
             torch_dtype=torch.float16, 
             load_in_4bit=True,
         ).model
-        tokenizer = AutoTokenizer.from_pretrained(config.base_model_name_or_path, padding_side="left")
+        tokenizer = AutoTokenizer.from_pretrained(config.base_model_name_or_path, padding_side = args.padding_side)
         tokenizer.pad_token = tokenizer.eos_token
         model_config = LORA_MODELS[args.model_name]
     else: 
         model = AutoModelForCausalLM.from_pretrained(args.model_name, torch_dtype=torch.float16, device_map="auto").eval()
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name, padding_side="left")
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name, padding_side = args.padding_side)
         raise Exception("Template not set for chat models yet")
     
     template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))['prompt']
@@ -484,10 +486,10 @@ def main():
                 layers = list(range(mw.model.config.num_hidden_layers))
 
             acts_dict = mw.batch_hiddens(prompts,
-                                            layers = layers,
-                                            tok_idxs = tok_idxs,
-                                            return_types = args.act_types,
-                                            logging = args.logging
+                                        layers = layers,
+                                        tok_idxs = tok_idxs,
+                                        return_types = args.act_types,
+                                        logging = args.logging
                                         )
 
             for act_type in args.act_types:

@@ -113,19 +113,23 @@ if __name__=="__main__":
         monitor = ActMonitor(probe = probe, layer = layer, tok_idxs = [int(i) for i in args.tok_idxs])
     elif args.monitor_type == "text":
         if args.monitor_path is not None: 
-            print("ASSUMING PEFT MODEL")
-            model = AutoPeftModelForCausalLM.from_pretrained(args.monitor_path, 
-                torch_dtype=torch.float16, 
-                device_map="auto")
-            model = model.merge_and_unload()
+            if "peft" in args.monitor_path:
+                model = AutoPeftModelForCausalLM.from_pretrained(args.monitor_path, 
+                    torch_dtype=torch.float16, 
+                    device_map="auto")
+                model = model.merge_and_unload()
+            else:
+                model = AutoModelForCausalLM.from_pretrained(args.monitor_path, 
+                    torch_dtype=torch.float16, 
+                    device_map="auto")
         else: 
             model = AutoModelForCausalLM.from_pretrained("meta-llama/LlamaGuard-7b", 
                 torch_dtype=torch.float16, 
                 device_map="auto")
         tokenizer = AutoTokenizer.from_pretrained(
             "meta-llama/LlamaGuard-7b",
-            use_fast=False,
-            padding_side="left")
+            use_fast = False,
+            padding_side = "right")
         tokenizer.pad_token = tokenizer.eos_token
         model.config.pad_token_id = tokenizer.pad_token_id
         
