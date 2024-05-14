@@ -311,7 +311,6 @@ def run(
             
             monitor.after_embeds = monitor.model.get_input_embeddings()(monitor.after_ids)
 
-    
     optim_ids = mw.tokenizer(config.optim_str_init, return_tensors="pt", add_special_tokens=False)["input_ids"].to(mw.model.device)
     
     buffer = AttackBuffer(config.buffer_size)

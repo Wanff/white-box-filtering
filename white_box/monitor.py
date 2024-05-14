@@ -103,5 +103,5 @@ class ActMonitor():
             return self.predict_proba(acts.float())
 
     def get_loss_no_grad(self, acts : torch.Tensor): 
-        with torch.no_grad(): 
-            return self.get_loss(acts)
+        # with torch.no_grad(): 
+        return self.get_loss(acts)
