@@ -112,7 +112,7 @@ if __name__=="__main__":
         if args.monitor_path is not None: 
             print("ASSUMING PEFT MODEL")
             model = AutoPeftModelForCausalLM.from_pretrained(args.monitor_path, 
-                torch_dtype=torch.bfloat16, 
+                torch_dtype=torch.float16, 
                 device_map="auto")
             model = model.merge_and_unload()
         else: 
@@ -156,7 +156,7 @@ if __name__=="__main__":
     else:
         raise ValueError(f"attack_type {args.attack_type} not recognized")
     
-    advbench_behaviors = advbench_behaviors.sample(frac=1).reset_index(drop=True, random_state = args.seed)
+    advbench_behaviors = advbench_behaviors.sample(frac=1, random_state = args.seed)
 
     for i, row in list(advbench_behaviors.iterrows()):
         print(row['goal'])

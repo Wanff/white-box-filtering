@@ -88,11 +88,10 @@ def main(args):
             preds = torch.stack([outputs.logits[:,-1, 9109], outputs.logits[:,-1, 25110]], dim=1).softmax(-1)
             # preds = outputs.logits
             loss = F.cross_entropy(preds, batch['labels'])
-            loss = loss / args.accumulation_steps
-            loss.backward()
             total_loss += loss.detach().float()
             
             if step % args.accumulation_steps == 0:
+                loss.backward()
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
@@ -139,8 +138,8 @@ if __name__ == '__main__':
     parser.add_argument('--file_spec', type=str, default='harmbench_alpaca_')
     parser.add_argument('--seed', type=int, default=0, help='seed')
     parser.add_argument('--lr', type=float, default=1e-5, help='learning rate')
-    parser.add_argument('--batch_size', type=int, default=2, help='batch size per device')
-    parser.add_argument('--accumulation_steps', type=int, default=16, help='accumulation steps')
+    parser.add_argument('--batch_size', type=int, default=4, help='batch size per device')
+    parser.add_argument('--accumulation_steps', type=int, default=4, help='accumulation steps')
     parser.add_argument('--num_epochs', type=int, default=3, help='number of epochs')
     parser.add_argument('--device', type=str, default='cuda', help='device')
     args = parser.parse_args()

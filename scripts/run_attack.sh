@@ -2,11 +2,11 @@
 #SBATCH --nodes=1
 #SBATCH --gpus-per-node=1
 #SBATCH --time=24:00:00
-#SBATCH --job-name=FinalFTLlamaGuardGCG2x
-#SBATCH --output=FinalFTLlamaGuardGCG2x.out
+#SBATCH --job-name=FinalLinearLossScheduleFTLlamaGuardGCG
+#SBATCH --output=FinalLinearLossScheduleFTLlamaGuardGCG.out
 
 SAVE_PATH="../data/llama2_7b"
-FILE_SPEC="final_gcg_run_ft_llamaguard_2k"
+# FILE_SPEC="final_gcg_run_just_ft_llamaguard"
 
 # python run_attack.py \
 #     --model_name "llama2_7b" \
@@ -20,6 +20,7 @@ FILE_SPEC="final_gcg_run_ft_llamaguard_2k"
 #     --file_spec "$FILE_SPEC" \
 #     --seed 0 
 
+FILE_SPEC="final_gcg_test"
 python run_attack.py \
     --model_name "llama2_7b" \
     --save_path "$SAVE_PATH" \
@@ -28,7 +29,8 @@ python run_attack.py \
     --monitor_type "text" \
     --monitor_path "../data/llama2_7b/llamaguard_generated__model_2" \
     --file_spec "$FILE_SPEC" \
-    --seed 0
+    --seed 0 
+    
 
 # python run_attack.py \
 #     --model_name "llama2_7b" \
@@ -43,4 +45,4 @@ python run_attack.py \
 #     --save_path "$SAVE_PATH" \
 #     --monitor_type "text" \
 #     --file_spec "$FILE_SPEC" \
-#     --seed 0 \
+#     --seed 0
