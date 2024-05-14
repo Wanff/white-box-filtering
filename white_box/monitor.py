@@ -62,8 +62,9 @@ class TextMonitor(Monitor):
                     
             output = self.model(input_ids=input_ids,
                                 past_key_values = kv_cache_batch)
-            proba = torch.stack([output.logits[:,-1, 9109], output.logits[:,-1, 25110]], dim=1).softmax(-1)
-            proba = proba[:,1]
+            proba = torch.stack([output.logits[:,-1, 9109], output.logits[:,-1, 25110]], dim=1).softmax(-1)[:, 1]
+            # labels = torch.zeros(batch_size).to(self.model.device)
+            # loss = torch.nn.functional.cross_entropy(proba, labels.long())
     
         return proba
 
@@ -72,9 +73,11 @@ class TextMonitor(Monitor):
         
         output = self.model(inputs_embeds=embeds,
                                     past_key_values=self.kv_cache if self.kv_cache is not None else None)
-        proba = torch.stack([output.logits[:,-1, 9109], output.logits[:,-1, 25110]], dim=1).softmax(-1)
-        proba = proba[0,1]
-        
+        proba = torch.stack([output.logits[:,-1, 9109], output.logits[:,-1, 25110]], dim=1).softmax(-1)[:, 1]
+
+        # labels = torch.zeros(embeds.shape[0]).to(self.model.device)
+        # loss = torch.nn.functional.cross_entropy(proba, labels.long())
+
         return proba
     
     def get_loss(self, embeds : torch.Tensor): 
