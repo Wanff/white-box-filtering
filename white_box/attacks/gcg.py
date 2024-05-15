@@ -401,11 +401,24 @@ def run(
         gcg_condition = model_preds.eq(shift_labels).all() 
         monitor_condition = (monitor_loss < 0.5) 
         
-        if gcg_condition and monitor_condition:
-            print("Early Stopping Condition Met")
-            early_stopping_condition.append(1)
-        else:
-            early_stopping_condition.append(0)
+        if config.gcg_loss_weight == 0:
+            if monitor_condition:
+                print("Early Stopping Condition Met")
+                early_stopping_condition.append(1)
+            else:
+                early_stopping_condition.append(0)
+        elif config.monitor_loss_weight == 0:
+            if gcg_condition:
+                print("Early Stopping Condition Met")
+                early_stopping_condition.append(1)
+            else:
+                early_stopping_condition.append(0)
+        elif config.monitor_loss_weight > 0 and config.gcg_loss_weight > 0:
+            if gcg_condition and monitor_condition:
+                print("Early Stopping Condition Met")
+                early_stopping_condition.append(1)
+            else:
+                early_stopping_condition.append(0)
   
         optim_ids_onehot_grad = torch.autograd.grad(outputs=[loss], inputs=[optim_ids_onehot])[0]
 
