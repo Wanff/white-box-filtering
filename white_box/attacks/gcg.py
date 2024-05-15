@@ -27,6 +27,8 @@ class GCGConfig:
     gcg_loss_weight : float = 1.0
     monitor_loss_weight : float = 1.0
     use_search_width_sched : bool = False
+    use_n_replace_sched : bool = True
+    use_loss_weight_sched : bool = False
 
 class AttackBuffer:
     def __init__(self, size: int):
@@ -217,26 +219,6 @@ def gen_init_buffer_ids(mw : ModelWrapper, num_toks: int, num_seqs: int):
     init_buffer_ids = [punc_tok_ids[torch.multinomial(punc_tok_ids, num_toks, replacement = True)].unsqueeze(0).long() for _ in range(num_seqs)]
     
     return init_buffer_ids
-
-def step_loss_weights(gcg_weight, monitor_weight, total_steps):
-    size = 1/total_steps
-    if np.abs(gcg_weight - monitor_weight) < size:
-        gcg_weight, monitor_weight = 0.5, 0.5
-    if gcg_weight > monitor_weight:
-        gcg_weight -= size
-        monitor_weight += size
-    elif gcg_weight < monitor_weight:
-        gcg_weight += size
-        monitor_weight -= size
-    pre_softmax_gcg_weight, pre_softmax_monitor_weight = gcg_weight, monitor_weight
-    comb = torch.tensor([gcg_weight, monitor_weight])
-    comb = torch.nn.functional.softmax(comb / 0.1, dim=0)
-    gcg_weight = comb[0].item()
-    monitor_weight = comb[1].item()
-    return gcg_weight, monitor_weight, pre_softmax_gcg_weight, pre_softmax_monitor_weight
-
-def step_loss_weights(gcg_weight, monitor_weight, total_steps):
-    return gcg_weight, monitor_weight, gcg_weight, monitor_weight
     
 def run(
     mw : ModelWrapper,
@@ -257,11 +239,17 @@ def run(
     Returns:
         A dict that stores losses and the final optim_str
     """
+    if config == None:
+        config = GCGConfig()
+        
     def n_replace_sched(step: int) -> int:
-        n_replace = int((1 - (step / 300)) * config.n_replace)
-        if n_replace < 1:
-            return 1
-        return n_replace
+        if config.use_n_replace_sched:
+            n_replace = int((1 - (step / 300)) * config.n_replace) #piecewise schedule
+            if n_replace < 1:
+                return 1
+            return n_replace
+        else:
+            return config.n_replace
     def search_width_sched(n_repeat : int) -> int:
         """as n_repeat goes from 1 to 10, search_width goes from search_width to 4 * search_width"""
         if config.use_search_width_sched:
@@ -272,9 +260,25 @@ def run(
             return config.search_width * mult
         else:
             return config.search_width
-        
-    if config == None:
-        config = GCGConfig()
+    def step_loss_weights(gcg_weight, monitor_weight, total_steps):
+        if config.use_loss_weight_sched:
+            size = 1/total_steps
+            if np.abs(gcg_weight - monitor_weight) < size:
+                gcg_weight, monitor_weight = 0.5, 0.5
+            if gcg_weight > monitor_weight:
+                gcg_weight -= size
+                monitor_weight += size
+            elif gcg_weight < monitor_weight:
+                gcg_weight += size
+                monitor_weight -= size
+            pre_softmax_gcg_weight, pre_softmax_monitor_weight = gcg_weight, monitor_weight
+            comb = torch.tensor([gcg_weight, monitor_weight])
+            comb = torch.nn.functional.softmax(comb / 0.1, dim=0)
+            gcg_weight = comb[0].item()
+            monitor_weight = comb[1].item()
+            return gcg_weight, monitor_weight, pre_softmax_gcg_weight, pre_softmax_monitor_weight
+        else:
+            return config.gcg_loss_weight, config.monitor_loss_weight, config.gcg_loss_weight, config.monitor_loss_weight
     
     if isinstance(messages, str):
         messages = [{"role": "user", "content": messages}]
@@ -318,17 +322,14 @@ def run(
             after_embeds.repeat(buffer_ids.shape[0], 1, 1),
             target_embeds.repeat(buffer_ids.shape[0], 1, 1)
         ], dim=1)    
-        
-    gcg_weight, monitor_weight = config.gcg_loss_weight, config.monitor_loss_weight
-    pre_softmax_gcg_weight, pre_softmax_monitor_weight = gcg_weight, monitor_weight
-    
+            
     loss = find_executable_batch_size(compute_candidates_loss, buffer_ids.shape[0])(
             mw.model,
             kv_cache,
             input_embeds,
             target_ids,
-            gcg_weight, 
-            monitor_weight,
+            config.gcg_loss_weight, 
+            config.monitor_loss_weight,
             monitor, 
             sampled_ids = buffer_ids,
             config = config
@@ -368,13 +369,13 @@ def run(
                             tok_idxs = torch.tensor(monitor.tok_idxs) - target_ids.shape[1],
                             return_prompt_acts = False,
                             device = mw.model.device)
-                monitor_loss = monitor.get_loss(monitor_input)
-                del monitor_input
             elif isinstance(monitor, TextMonitor):
-                monitor_input_embeds = torch.cat([optim_embeds, monitor.after_embeds], dim=1)
-                monitor_loss = monitor.get_loss(monitor_input_embeds)
+                monitor_input = torch.cat([optim_embeds, monitor.after_embeds], dim=1)
+            
+            monitor_loss = monitor.get_loss(monitor_input)
             
             print(monitor_loss)
+            del monitor_input
             del output
             clear_gpus()
         else:
@@ -387,8 +388,10 @@ def run(
         model_preds = torch.argmax(shift_logits, dim=-1)
         gcg_weight, monitor_weight, pre_softmax_gcg_weight, pre_softmax_monitor_weight = step_loss_weights(pre_softmax_gcg_weight, pre_softmax_monitor_weight, config.num_steps)
 
-        print(f'Pre softmax GCG weight: {pre_softmax_gcg_weight}, Pre softmax Monitor weight: {pre_softmax_monitor_weight}')
-        print(f'GCG weight: {gcg_weight}, Monitor weight: {monitor_weight}')
+        if config.use_loss_weight_sched:
+            print(f'Pre softmax GCG weight: {pre_softmax_gcg_weight}, Pre softmax Monitor weight: {pre_softmax_monitor_weight}')
+            print(f'GCG weight: {gcg_weight}, Monitor weight: {monitor_weight}')
+            
         loss = gcg_weight * gcg_loss + monitor_weight * monitor_loss
         
         print(f"model preds : {mw.tokenizer.decode(model_preds.squeeze(0))}")
