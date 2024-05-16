@@ -403,7 +403,7 @@ def load_model_and_tokenizer(
     num_gpus=1,
     ## tokenizer args
     use_fast_tokenizer=True,
-    padding_side='left',
+    padding_side='left', # TODO: BAD
     legacy=False,
     pad_token=None,
     eos_token=None,

@@ -77,7 +77,7 @@ class TextMonitor(Monitor):
             
     def _predict_proba(self, input_ids : torch.Tensor):
         """This function assumes you're already using a kvcache that has the llamaguard instruction string set
-        takes in batched input_ids
+        takes in batched input_ids, assumes no padding tokens are used
         """
         batch_size = input_ids.shape[0]
         if self.kv_cache is not None:

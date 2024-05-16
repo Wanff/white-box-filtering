@@ -462,7 +462,7 @@ class ModelWrapper(torch.nn.Module):
                                    output_tokens = False, 
                                    layers = None,
                                    tok_idxs = None,
-                                    return_prompt_acts = False,
+                                   return_prompt_acts = False,
                                    **kwargs):
         if isinstance(prompts[0], str):
             inputs = self.tokenizer(prompts, return_tensors="pt", padding=True, max_length=512, truncation=True)
@@ -475,7 +475,7 @@ class ModelWrapper(torch.nn.Module):
         out = self.model.generate(
                     input_ids=input_ids,
                     attention_mask=attention_mask,
-                    pad_token_id=self.tokenizer.eos_token_id,
+                    pad_token_id=self.tokenizer.eos_token_id, # TODO: BAD this is hardcoded, different for eg dutch model
                     max_new_tokens = max_new_tokens,
                     min_new_tokens = max_new_tokens,
                     output_hidden_states = output_hidden_states,
