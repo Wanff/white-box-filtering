@@ -9,5 +9,7 @@
     "device": "cuda",
     "gcg_loss_weight": 1,
     "monitor_loss_weight": 1,
-    "use_search_width_sched": false
+    "use_search_width_sched": false,
+    "use_n_replace_sched": true,
+    "use_loss_weight_sched": false
 }
