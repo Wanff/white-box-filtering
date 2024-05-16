@@ -280,6 +280,11 @@ def run(
         else:
             return config.gcg_loss_weight, config.monitor_loss_weight, config.gcg_loss_weight, config.monitor_loss_weight
     
+    gcg_weight = config.gcg_loss_weight
+    monitor_weight = config.monitor_loss_weight
+    pre_softmax_gcg_weight = gcg_weight
+    pre_softmax_monitor_weight = monitor_weight
+    
     if isinstance(messages, str):
         messages = [{"role": "user", "content": messages}]
     
