@@ -327,7 +327,8 @@ def run(
             after_embeds.repeat(buffer_ids.shape[0], 1, 1),
             target_embeds.repeat(buffer_ids.shape[0], 1, 1)
         ], dim=1)    
-            
+    
+    pre_softmax_gcg_weight, pre_softmax_monitor_weight = config.gcg_loss_weight, config.monitor_loss_weight
     loss = find_executable_batch_size(compute_candidates_loss, buffer_ids.shape[0])(
             mw.model,
             kv_cache,

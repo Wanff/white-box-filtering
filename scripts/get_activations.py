@@ -364,7 +364,7 @@ def get_activations_autoreg_generic(mw: ModelWrapper, prompts: Union[List[str], 
         os.makedirs(save_path)
 
     if layers is None:
-        layers = range(1, mw.model.config.num_hidden_layers + 1)
+        layers = range(mw.model.config.num_hidden_layers)
         
     all_generations = []
     all_tokens = []
