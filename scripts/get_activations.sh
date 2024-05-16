@@ -19,13 +19,21 @@
 #     --tok_idxs -1 -2 -3 -4 -5  \
 #     --file_spec "jb_eq_by_jbname_" &> ../data/llama2_7b/jb_eq_by_jbname.out &
 
+# python get_activations.py \
+#     --model_name "llama2_7b" \
+#     --dataset_name_or_path "../data/llama2_7b/all_gpt_gen_metadata.csv" \
+#     --save_path "../data/llama2_7b/" \
+#     --tok_idxs -1 -2 -3 -4 -5  \
+#     --padding_side "right" \
+#     --file_spec "all_gpt_gen_" &> ../data/llama2_7b/all_gpt_gen.out &
+
 python get_activations.py \
     --model_name "llama2_7b" \
-    --dataset_name_or_path "../data/llama2_7b/all_gpt_gen_metadata.csv" \
+    --dataset_name_or_path "../data/llama2_7b/all_harmbench_alpaca_metadata.csv" \
     --save_path "../data/llama2_7b/" \
     --tok_idxs -1 -2 -3 -4 -5  \
     --padding_side "right" \
-    --file_spec "all_gpt_gen_" &> ../data/llama2_7b/all_gpt_gen.out &
+    --file_spec "all_harmbench_alpaca" &> ../data/llama2_7b/all_harmbench_alpaca.out &
 
 #* MISTRAL
 # python get_activations.py \

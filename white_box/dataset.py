@@ -214,6 +214,8 @@ class ActDataset:
     
     def convert_states(self, states : torch.Tensor, labels : torch.Tensor, tok_idxs : List[int] = None, layer : int = None):
             if tok_idxs is not None:
+                tok_idxs = sorted(tok_idxs)
+                
                 labels = labels.view(-1, 1).expand(-1, len(tok_idxs)).flatten()
                 if layer is not None:
                     states = states[:, layer, tok_idxs].reshape(-1, states.shape[3])
@@ -504,6 +506,7 @@ class ProbeDataset():
                               pred_method : str = "mean",
                               thresh : float = 0.5,
                               ):
+        tok_idxs = sorted(tok_idxs)
         assert self.act_dataset.metadata_test_idxs is not None, "train_test_split needs to already have been called"
         val_idxs = self.act_dataset.test_idxs
         val_labels = self.act_dataset.y[val_idxs]
@@ -522,7 +525,7 @@ class ProbeDataset():
         return self.act_dataset.metadata_test_idxs[torch.where(res == 0)[0]]
         
     def get_probe_accuracy(self, probe : Probe, layer : int, tok_idxs : List[int], pred_method : str = "mean", thresh : float = 0.5, test_size = 1): 
-        
+        tok_idxs = sorted(tok_idxs)
         val_states = self.act_dataset.X[:,layer, tok_idxs]
         y_val = self.act_dataset.y
 
