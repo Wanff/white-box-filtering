@@ -94,11 +94,11 @@ if __name__=="__main__":
         probe_dataset = ProbeDataset(dataset)
 
         if args.probe_type == "sk":
-            acc, auc, probe = probe_dataset.train_sk_probe(layer, tok_idxs = list(range(5)), test_size = None, C = args.probe_reg, max_iter = args.max_iter, use_train_test_split=False, device='cuda')
+            acc, auc, probe = probe_dataset.train_sk_probe(layer, tok_idxs = [int(i) for i in args.tok_idxs], test_size = None, C = args.probe_reg, max_iter = args.max_iter, use_train_test_split=False, device='cuda')
         elif args.probe_type == "mm":
-            acc, auc, probe = probe_dataset.train_mm_probe(layer, tok_idxs=list(range(5)), test_size=None)
+            acc, auc, probe = probe_dataset.train_mm_probe(layer, tok_idxs= [int(i) for i in args.tok_idxs], test_size=None)
         elif args.probe_type == "mlp":
-            acc, auc, probe = probe_dataset.train_mlp_probe(layer, tok_idxs=list(range(5)), test_size=None,
+            acc, auc, probe = probe_dataset.train_mlp_probe(layer, tok_idxs= [int(i) for i in args.tok_idxs], test_size=None,
                                                             weight_decay = 1, lr = 0.0001, epochs = 5000)
         print(acc, auc)
         

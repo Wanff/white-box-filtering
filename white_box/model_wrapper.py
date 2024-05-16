@@ -253,7 +253,7 @@ GPT_BLOCK_NAMES = [
 def detokenize_to_list(tokenizer, input_ids):
     return [[tokenizer.decode(input_ids[i][j]) for j in range(len(input_ids[0]))] for i in range(len(input_ids))]
 
-def slice_acts(out, N_TOKS: int, return_prompt_acts: bool, layers: List, tok_idxs: List = None, device: str = 'cpu'):
+def slice_acts(out, N_TOKS: int, return_prompt_acts: bool, layers: List, tok_idxs: torch.Tensor = None, device: str = 'cpu'):
     """slices acts out of huggingface modeloutput object
 
     Args:
@@ -293,6 +293,8 @@ def slice_acts(out, N_TOKS: int, return_prompt_acts: bool, layers: List, tok_idx
         acts = acts.cpu()
         
     if tok_idxs is not None:
+        assert len(tok_idxs.shape) == 1, "tok_idxs must be one dimensional."
+        tok_idxs = tok_idxs.sort(dim = 0).values
         acts = acts[:, :, tok_idxs]
     acts = acts[:, torch.tensor(layers) + 1] #+1 bc of embedding layer
     return acts

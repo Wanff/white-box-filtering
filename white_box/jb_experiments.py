@@ -1,9 +1,15 @@
 import numpy as np 
 import pandas as pd
 from tqdm import tqdm 
+from collections import defaultdict 
+
+from sklearn.metrics import accuracy_score, roc_auc_score
+from sklearn.metrics import roc_curve
+from sklearn.metrics import auc as sklearn_auc
 
 import plotly.graph_objects as go
 import plotly.express as px
+import matplotlib.pyplot as plt
 
 from white_box.dataset import PromptDist, ActDataset, create_prompt_dist_from_metadata_path, ProbeDataset
 
@@ -125,4 +131,69 @@ def plot_dual_metric_by_category(res, layer, primary_metric, secondary_metric):
     
     # Show plot
     fig.show()
+
+def plot_probe_on_test_dataset(probes, test_dataset, title='test'): 
     
+    metrics = defaultdict(list)
+
+    for layer in range(32):
+        pred_probas = probes[layer].predict_proba(test_dataset.act_dataset.X[:, layer])
+        probas_mean = pred_probas.mean(dim=-1).detach().cpu().numpy()
+        labels = test_dataset.act_dataset.y.detach().cpu().numpy()
+
+        metrics['acc'].append(accuracy_score(labels, probas_mean > 0.5))
+        metrics['auc'].append(roc_auc_score(labels, probas_mean))
+        metrics['TPR'].append(((probas_mean > 0.5) & (labels == 1)).sum() / (labels == 1).sum())
+        metrics['TNR'].append(((probas_mean < 0.5) & (labels == 0)).sum() / (labels == 0).sum())
+        metrics['FPR'].append(((probas_mean > 0.5) & (labels == 0)).sum() / (labels == 0).sum())
+        metrics['FNR'].append(((probas_mean < 0.5) & (labels == 1)).sum() / (labels == 1).sum())
+    
+    fig = go.Figure()
+    x = list(range(32))
+    fig.add_trace(go.Scatter(x=x, y=metrics['acc'], mode='lines', name='Accuracy'))
+    fig.add_trace(go.Scatter(x=x, y=metrics['auc'], mode='lines', name='AUC'))
+    fig.add_trace(go.Scatter(x=x, y=metrics['TPR'], mode='lines', name='TPR'))
+    fig.add_trace(go.Scatter(x=x, y=metrics['TNR'], mode='lines', name='TNR'))
+    fig.add_trace(go.Scatter(x=x, y=metrics['FPR'], mode='lines', name='FPR'))
+    fig.add_trace(go.Scatter(x=x, y=metrics['FNR'], mode='lines', name='FNR'))
+    fig.update_layout(
+        title=f"Test on {title} dataset", 
+        xaxis_title="Layers",
+        yaxis_title="Value",
+    )
+    fig.show()
+    
+def results_given_probas(probas, labels): 
+    print(f"Accuracy: {accuracy_score(labels, probas > 0.5)}")
+    print(f"AUC: {roc_auc_score(labels, probas)}")
+    print(f"TPR: {((probas > 0.5) & (labels == 1)).sum() / (labels == 1).sum()}")
+    print(f"TNR: {((probas < 0.5) & (labels == 0)).sum() / (labels == 0).sum()}")
+    print(f"FPR: {((probas > 0.5) & (labels == 0)).sum() / (labels == 0).sum()}")
+    print(f"FNR: {((probas < 0.5) & (labels == 1)).sum() / (labels == 1).sum()}")
+    
+def plot_roc_curves(preds, labels): 
+    fpr, tpr, _ = roc_curve(labels, preds)
+    roc_auc = sklearn_auc(fpr, tpr)
+
+    fig, ax = plt.subplots(1, 2, figsize=(12, 6))
+    ax[0].plot(fpr, tpr, label=f'ROC curve (area = {roc_auc:.2f})')
+    ax[0].plot([0, 1], [0, 1], 'k--')
+    ax[0].set_xlim([0, 1])
+    ax[0].set_ylim([0, 1])
+    ax[0].set_xlabel('False Positive Rate')
+    ax[0].set_ylabel('True Positive Rate')
+    ax[0].set_title(f'ROC Curve Layer 24')
+    ax[0].legend()
+
+    # plot 0 to 5% FPR range
+    ax[1].plot(fpr, tpr, label=f'ROC curve (area = {roc_auc:.2f})')
+    ax[1].plot([0, 1], [0, 1], 'k--')
+    ax[1].set_xlim([0, 0.05])
+    ax[1].set_ylim([0, 1])
+    ax[1].set_xlabel('False Positive Rate')
+    ax[1].set_ylabel('True Positive Rate')
+    ax[1].set_title(f'ROC Curve Layer 24')
+    ax[1].legend()
+
+    plt.tight_layout()
+    plt.show()
