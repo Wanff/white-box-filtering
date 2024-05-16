@@ -394,6 +394,7 @@ _STR_DTYPE_TO_TORCH_DTYPE = {
 
 def load_model_and_tokenizer(
     model_name_or_path,
+    model_override=None,
     dtype='auto',
     device_map='auto',
     device=None,
@@ -420,7 +421,7 @@ def load_model_and_tokenizer(
     if device == 'cpu': 
         device_map = None
     
-    model = AutoModelForCausalLM.from_pretrained(model_name_or_path, 
+    model = AutoModelForCausalLM.from_pretrained(model_name_or_path if model_override is None else model_override,
         device_map=device_map, 
         torch_dtype=_STR_DTYPE_TO_TORCH_DTYPE[dtype], 
         trust_remote_code=trust_remote_code, 
@@ -429,7 +430,7 @@ def load_model_and_tokenizer(
     
     # Init Tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
-        model_name_or_path,
+        model_name_or_path, 
         use_fast=use_fast_tokenizer,
         trust_remote_code=trust_remote_code,
         legacy=legacy,

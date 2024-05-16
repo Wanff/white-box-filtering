@@ -39,7 +39,7 @@ def parse_args():
                         help="Use the question/n/nAnswer: format instead of fast chat. ")
     parser.add_argument('--device', type=str, default='cuda', 
                         help='Device to run the model on')
-    parser.add_argument('--padding_side', type=str, default='left', 
+    parser.add_argument('--padding_side', type=str, default='right', 
                         help='padding side for tokenizer')
 
     # Activation saving arguments

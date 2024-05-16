@@ -452,10 +452,6 @@ class ModelWrapper(torch.nn.Module):
                 hidden_states_dict[act_type] = torch.cat(hidden_states_dict[act_type], dim = 0)
             return hidden_states_dict
         
-        # @find_executable_batch_size(starting_batch_size=len(prompts))
-        # def inner_loop(batch_size):
-        #     return _inner_loop(batch_size)
-        
         return _inner_loop()
                                
     def batch_generate_autoreg(self, prompts, 
