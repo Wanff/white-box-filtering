@@ -254,19 +254,18 @@ def detokenize_to_list(tokenizer, input_ids):
     return [[tokenizer.decode(input_ids[i][j]) for j in range(len(input_ids[0]))] for i in range(len(input_ids))]
 
 def slice_acts(out, N_TOKS: int, return_prompt_acts: bool, layers: List, tok_idxs: List = None, device: str = 'cpu'):
-    """slices acts out of huggingface modeloutput object, have to + 1 layers
+    """slices acts out of huggingface modeloutput object
 
     Args:
         out (_type_): _description_
         N_TOKS (int): how many tokens generated
         return_prompt_toks (bool): _description_
-        layers (List): _description_
+        layers (List): hf 1-indexes layers bc it includes the embedding layer. we pass in 0-indexed layers like normal, but +1 to account for hf
 
     Returns:
      shape: b l t d
     """
-    #! expects hf layer idxs (ie 1-index)
-    #out.hidden_states is shape  max_new_tokens x n_layers + 1 x batch x activations
+    #out.hidden_states is shape: max_new_tokens x n_layers + 1 x batch x activations if generated autoregressively
 
     if N_TOKS == 0:
         acts = torch.stack(out.hidden_states, dim = 1) #this is when you just call model(), not generate
@@ -295,7 +294,7 @@ def slice_acts(out, N_TOKS: int, return_prompt_acts: bool, layers: List, tok_idx
         
     if tok_idxs is not None:
         acts = acts[:, :, tok_idxs]
-    acts = acts[:, torch.tensor(layers) + 1]
+    acts = acts[:, torch.tensor(layers) + 1] #+1 bc of embedding layer
     return acts
 
 def rename_attribute(object_, old_attribute_name, new_attribute_name):
@@ -386,7 +385,7 @@ class ModelWrapper(torch.nn.Module):
                 
     def batch_hiddens(self, 
                       prompts: Union[List[str], List[int]], 
-                      layers: List[int], 
+                      layers: List[int] = None, 
                       tok_idxs: Union[List[int], int] = -1, 
                       return_types = ['resid'], 
                       logging : bool = False, 
@@ -401,30 +400,35 @@ class ModelWrapper(torch.nn.Module):
             self.wrap_all()
             self.reset()
         
+        if not layers:
+            layers = list(range(self.num_layers))
+            
         if isinstance(layers, int):
             layers = [layers]
 
+        if isinstance(tok_idxs, int):
+            tok_idxs = [tok_idxs]
+            
+        @find_executable_batch_size(starting_batch_size=len(prompts))
         def _inner_loop(batch_size):
             nonlocal prompts, layers, tok_idxs, return_types, logging, kwargs
             hidden_states_dict = defaultdict(list)
-            tot_prompts = 0
             
             for i in tqdm(range(0, len(prompts), batch_size)):
-                start_time = time.time()
-                tot_prompts += batch_size
                 batched_prompts = prompts[i:i+batch_size]
             
                 input_ids, attention_mask = self.process_prompts(batched_prompts, use_chat_template = use_chat_template)
                 outputs = self.model(input_ids = input_ids, attention_mask=attention_mask, output_hidden_states = True, **kwargs)
                 
                 #if padding_side==left, tok_idxs is neg, one dimensional, and relative to the end of the sequence
-                #if padding_side==right, tok_idxs is pos, two dimensional (batch x tok_pos), and relative to the start of the sequence
+                #if padding_side==right, tok_idxs is pos (we make it pos), two dimensional (batch x tok_pos), and relative to the start of the sequence
                 if self.tokenizer.padding_side == "right":
-                    #* we're assuming that tok_idxs is negative
+                    #* we're assuming that tok_idxs is negative at first, we then make it positive
                     batch_last_tok_idxs = (torch.sum(attention_mask, dim = 1, keepdim = True) - 1).to("cpu")
                     batch_tok_idxs = batch_last_tok_idxs.repeat(1, len(tok_idxs)) + torch.tensor(tok_idxs).repeat(len(batched_prompts), 1) + 1
+                    batch_tok_idxs = batch_tok_idxs.sort(dim = 1).values #this is so that -1, the last token index is at the end
                 else:
-                    batch_tok_idxs = tok_idxs
+                    batch_tok_idxs = torch.tensor(tok_idxs).sort(dim = 0).values
                     
                 for act_type in return_types:
                     if act_type == 'resid':
@@ -436,7 +440,7 @@ class ModelWrapper(torch.nn.Module):
                             if self.tokenizer.padding_side == "left":
                                 acts_dict[layer] = acts_dict[layer][:, batch_tok_idxs, :]
                             else:
-                                acts_dict[layer] = acts_dict[layer][torch.arange(acts_dict[layer].shape[0]), batch_tok_idxs, :] #untested
+                                acts_dict[layer] = acts_dict[layer][torch.arange(acts_dict[layer].shape[0]), batch_tok_idxs, :] #*untested
                         
                         hidden_states_dict[act_type].append(torch.stack([acts_dict[layer] for layer in acts_dict.keys()]))
                 
@@ -445,16 +449,14 @@ class ModelWrapper(torch.nn.Module):
                 torch.cuda.empty_cache()
                 
             for act_type in hidden_states_dict:
-                hidden_states_dict[act_type] = torch.cat(hidden_states_dict[act_type], dim = 1).transpose(0, 1)
+                hidden_states_dict[act_type] = torch.cat(hidden_states_dict[act_type], dim = 0)
             return hidden_states_dict
         
-        @find_executable_batch_size(starting_batch_size=len(prompts))
-        def inner_loop(batch_size):
-            return _inner_loop(batch_size)
-        try:
-            return inner_loop()
-        except:
-            return _inner_loop(1)
+        # @find_executable_batch_size(starting_batch_size=len(prompts))
+        # def inner_loop(batch_size):
+        #     return _inner_loop(batch_size)
+        
+        return _inner_loop()
                                
     def batch_generate_autoreg(self, prompts, 
                                    max_new_tokens: int = 32,
@@ -519,28 +521,42 @@ class ModelWrapper(torch.nn.Module):
             self, 
             outputs,
             tok_idxs: Union[List[int], int]=-1,
-            hidden_layers: Union[List[int], int]=-1,
+            hidden_layers: Union[List[int], int] = 0,
             which_hidden_states: Optional[str]=None):
-        
+        """
+        tok_idxs can be neg, hidden_layers cannot be
+        """
         if hasattr(outputs, 'encoder_hidden_states') and hasattr(outputs, 'decoder_hidden_states'):
             outputs['hidden_states'] = outputs[f'{which_hidden_states}_hidden_states']
     
-        hidden_states_layers = {}
-        for layer in hidden_layers:
-            layer = layer + 1 #we do this because usually we 0-index layers, but hf does not bc it includes the embedding
-            hidden_states = outputs['hidden_states'][layer] #tuple where layer is tuple
-            
-            if self.tokenizer.padding_side == "left":
-                hidden_states =  hidden_states[:, tok_idxs, :]
-            elif self.tokenizer.padding_side == "right":
-                # print(torch.arange(hidden_states.shape[0]))
-                # print(tok_idxs)
-                hidden_states =  hidden_states[torch.arange(hidden_states.shape[0]), tok_idxs, :]
-                
-            # hidden_states_layers[layer] = hidden_states.cpu().to(dtype=torch.float32).detach().numpy()
-            hidden_states_layers[layer - 1] = hidden_states.detach().cpu().to(dtype = torch.float32)
+        hidden_states =  torch.stack([r for r in outputs['hidden_states']], dim=1) #shape: batch x n_lyr + 1 x seq_len x d_M
         
-        return torch.stack([hidden_states_layers[layer] for layer in hidden_states_layers.keys()])
+        hidden_states = hidden_states[:, torch.tensor(hidden_layers) + 1] #we add 1 usually we 0-index layers, but hf does not bc it includes the embedding
+        
+        if self.tokenizer.padding_side == "left":
+            hidden_states =  hidden_states[:, :, tok_idxs, :]
+        elif self.tokenizer.padding_side == "right":
+            b = hidden_states.shape[0]
+            b_idxs = torch.arange(b).unsqueeze(1).expand(-1, tok_idxs.shape[1])
+            # print(b_idxs)
+            # print(tok_idxs)
+            hidden_states =  hidden_states[b_idxs, :, tok_idxs].transpose(1, 2) #n_lyr and seq_len get swapped w advanced indexing, so have to swap back
+        
+        return hidden_states.detach().cpu().to(dtype = torch.float32)
+        
+        # hidden_states_layers = {}
+        # for layer in hidden_layers:
+        #     layer = layer + 1 #we do this because usually we 0-index layers, but hf does not bc it includes the embedding
+        #     hidden_states = outputs['hidden_states'][layer] #tuple where layer is tuple
+            
+        #     if self.tokenizer.padding_side == "left":
+        #         hidden_states =  hidden_states[:, tok_idxs, :]
+        #     elif self.tokenizer.padding_side == "right":
+        #         hidden_states =  hidden_states[torch.arange(hidden_states.shape[0]), tok_idxs, :]
+                
+        #     hidden_states_layers[layer - 1] = hidden_states.detach().cpu().to(dtype = torch.float32)
+        
+        # return torch.stack([hidden_states_layers[layer] for layer in hidden_states_layers.keys()]).transpose(0, 1) #swap layer and batch dim
     
     def query_tok_dist(self, prompt, TOP_K = 10):
         """
