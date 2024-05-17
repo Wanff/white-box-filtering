@@ -158,6 +158,9 @@ def main(args):
         train_ppl = torch.exp(train_epoch_loss)
         print(f"{epoch} | Train Loss: {train_epoch_loss} | Train PPL: {train_ppl}")
         
+        if args.save_per_epoch:
+            model.save_pretrained(f'{args.path}/{args.output_name}_epoch_{epoch}')
+        
         print("RUNNING EVAL")
         model.eval()
         total_loss = 0
@@ -177,9 +180,6 @@ def main(args):
         test_epoch_loss = total_loss / len(test_dataloader)
         test_ppl = torch.exp(test_epoch_loss)
         print(f"{epoch} | Test Loss: {test_epoch_loss} | Test PPL: {test_ppl}")
-
-        if args.save_per_epoch:
-            model.save_pretrained(f'{args.path}/{args.output_name}_epoch_{epoch}')
             
     model.save_pretrained(f'{args.path}/{args.output_name}')
 
@@ -199,7 +199,7 @@ if __name__ == '__main__':
     parser.add_argument('--dtype', type=str, default='bfloat16', help='dtype')
     parser.add_argument('--path', type=str, default='../data/llama3_8b/ciphers/')
     parser.add_argument('--dataset_name', type=str, default='yahma/alpaca-cleaned')
-    parser.add_argument('--cipher', type=str, default='rot_7', help='cipher')
+    parser.add_argument('--cipher', type=str, default='rot_3', help='cipher')
     parser.add_argument('--output_name', type=str, default='alpaca_caesar7_llama3', help='name of output')
     parser.add_argument('--seed', type=int, default=0, help='seed')
     parser.add_argument('--lr', type=float, default=1e-5, help='learning rate')

@@ -2,8 +2,8 @@
 #SBATCH --nodes=1
 #SBATCH --gpus-per-node=1
 #SBATCH --time=02:00:00
-#SBATCH --job-name=rot7_finetune
-#SBATCH --output=rot7_finetune.out
+#SBATCH --job-name=rot3_finetune
+#SBATCH --output=rot3_finetune.out
 
 # for seed in 0 1 2 3 4; do
 #     python classifier_finetune.py \
@@ -19,15 +19,17 @@
 # for category in "${categories[@]}"; do
 #     # run in dist
 #     python classifier_finetune.py \
-#         --path "../data/llama2_7b/generalization" \
+#         --path "../data/llama2_7b/generalization/leave_one_out" \
 #         --train_file_spec "${category}_train" \
-#         --test_file_spec "${category}_test" 
+#         --test_file_spec "${category}_test" \
+#         --no_save_at_end
 #     echo "Done with category $category"
 #     # run leave one out
 #     python classifier_finetune.py \
-#         --path "../data/llama2_7b/generalization" \
+#         --path "../data/llama2_7b/generalization/leave_one_out" \
 #         --train_file_spec "all_but_${category}_train" \
-#         --test_file_spec "${category}_test"
+#         --test_file_spec "${category}_test" \
+#         --no_save_at_end
 #     echo "Done with leave one out category $category"
 # done
 
@@ -51,4 +53,4 @@
 
 # CIPHER FINETUNE
 
-python cipher_finetune.py
+python cipher_finetune.py --save_per_epoch

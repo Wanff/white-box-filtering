@@ -37,9 +37,9 @@ def main(args):
     test_datasets = [Dataset.from_pandas(x) for x in test_datasets]
     
     # subsample
-    if args.subsample is not None:
-        train_dataset = train_dataset.select(range(args.subsample))
-        test_datasets = [x.select(range(args.subsample)) for x in test_datasets]
+    if args.subsample_size is not None:
+        train_dataset = train_dataset.select(range(args.subsample_size))
+        # test_datasets = [x.select(range(args.subsample_size)) for x in test_datasets]
     
     def custom_collator(examples):
         input_ids = []
@@ -131,7 +131,7 @@ def main(args):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_name', type=str, default='llamaguard', help='model name')
+    parser.add_argument('--model_name', type=str, default='llama-2-7b-for-harm-classification', help='model name')
     parser.add_argument('--dtype', type=str, default='bfloat16', help='dtype')
     parser.add_argument('--path', type=str, default='../data/llama2_7b')
     parser.add_argument('--train_file_spec', type=str, default='harmbench_alpaca_metadata')
@@ -142,7 +142,7 @@ if __name__ == '__main__':
     parser.add_argument('--accumulation_steps', type=int, default=16, help='accumulation steps')
     parser.add_argument('--num_epochs', type=int, default=1, help='number of epochs')
     parser.add_argument('--device', type=str, default='cuda', help='device')
-    parser.add_argument('--subsample', type=int, default=None, help='subsample')
+    parser.add_argument('--subsample_size', type=int, default=None, help='subsample')
     parser.add_argument('--no_save_at_end', action='store_true', default=False, help='save at end')
     args = parser.parse_args()
 

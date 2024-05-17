@@ -27,6 +27,7 @@ class TextMonitor(Monitor):
                 monitor_type : str = "input"):
         self.model = model
         self.tokenizer = tokenizer
+        self.device = self.model.device
         
         if config_name == "llamaguard":
             self.instruction_prompt = None
@@ -119,22 +120,17 @@ class TextMonitor(Monitor):
         template =  get_template(self.model_name, chat_template=MODEL_CONFIGS[self.model_name].get('chat_template', None))['prompt']
         preds = []
         for i in tqdm(range(0, len(prompts), batch_size)):
-            input_ids = []
-            last_token_idxs = []
-            for prompt in prompts[i:i+batch_size]:
-                if self.instruction_prompt is not None:
-                    prompt = self.instruction_prompt + prompt
-               
-                prompt = template.format(instruction=prompt)
-                input_ids.append(self.tokenizer(prompt)['input_ids'])
-                last_token_idxs.append(len(input_ids[-1]) - 1)
-        
-            padded = self.tokenizer.pad({'input_ids': input_ids}, return_tensors='pt')
-            input_ids = padded['input_ids']
-            attn_masks = padded['attention_mask']
-            output = self.model(input_ids.to(self.model.device), attention_mask=attn_masks.to(self.model.device))        
-            preds.append(torch.stack([output.logits[torch.arange(input_ids.shape[0]), last_token_idxs, 9109], output.logits[torch.arange(input_ids.shape[0]), last_token_idxs, 25110]], dim=1).softmax(-1).cpu().detach().numpy()[:, 1])
-            del input_ids
+            
+            current_batch_prompts = prompts[i:i+batch_size]
+            if self.instruction_prompt is not None: 
+                current_batch_prompts = [self.instruction_prompt + prompt for prompt in current_batch_prompts]
+            current_batch_prompts = [template.format(instruction=prompt) for prompt in current_batch_prompts]
+            toks = self.tokenizer(current_batch_prompts, return_tensors='pt', padding=True, truncation=True)
+            last_token_idxs = toks['attention_mask'].sum(1) - 1
+            
+            output = self.model(**toks.to(self.device))   
+            preds.append(torch.stack([output.logits[torch.arange(len(current_batch_prompts)), last_token_idxs, 9109], output.logits[torch.arange(len(current_batch_prompts)), last_token_idxs, 25110]], dim=1).softmax(-1).cpu().detach().numpy()[:, 1])
+            del toks
             del output
             torch.cuda.empty_cache()
 
