@@ -39,7 +39,8 @@ class HuggingFace(LanguageModel):
                         max_n_tokens: int, 
                         temperature: float,
                         top_p: float = 1.0,
-                        monitor : Monitor = None):
+                        monitor : Monitor = None,
+                        adv_ids = None):
         if 'llama2' in self.model_name.lower():
             max_n_tokens += 1  # +1 to account for the first special token (id=29871) for llama2 models
         batch_size = len(full_prompts_list)
@@ -101,7 +102,11 @@ class HuggingFace(LanguageModel):
                             return_prompt_acts = True if monitor.monitor_type == "input" else False)
                 monitor_losses = monitor.get_loss(monitor_input)
             elif isinstance(monitor, TextMonitor):
-                monitor_losses = monitor.get_loss(full_prompts_list)
+                # print(adv_ids)
+                adv_ids = adv_ids.to(monitor.after_ids.device)
+                ids = torch.cat([adv_ids, monitor.after_ids.repeat(adv_ids.shape[0], 1)], dim=1)
+                # print(self.tokenizer.batch_decode(ids))
+                monitor_losses = monitor.get_loss_no_grad(ids)
             
             # print(monitor_losses)
             for i, out in enumerate(outputs):

@@ -10,6 +10,7 @@ from .prompts import get_universal_manual_prompt
 from .conversers import load_target_model
 from .utils import insert_adv_string, schedule_n_to_change_fixed, schedule_n_to_change_prob, extract_logprob, early_stopping_condition, early_stopping_condition_with_monitor
 
+from ..monitor import TextMonitor
 
 class AttackBuffer:
     def __init__(self, size: int):
@@ -74,6 +75,7 @@ def mutate_str(tokenizer, n_chars_change_max, schedule_prob, schedule_n_to_chang
             n_tokens_change = schedule_n_to_change_fixed(n_tokens_change_max, it)  
         else:
             n_tokens_change = n_tokens_change_max
+        adv_tokens = adv_tokens.squeeze().tolist()
         substitute_pos_start = random.choice(range(len(adv_tokens)))
         substitution_tokens = np.random.randint(0, max_token_value, n_tokens_change).tolist()
         adv_tokens = adv_tokens[:substitute_pos_start] + substitution_tokens + adv_tokens[substitute_pos_start+n_tokens_change:]
@@ -81,8 +83,8 @@ def mutate_str(tokenizer, n_chars_change_max, schedule_prob, schedule_n_to_chang
     
     return adv
        
-def eval_strs(targetLM, target_token, strs, score_type):
-    output = targetLM.get_response(strs, max_n_tokens=1)
+def eval_strs(targetLM, target_token, strs, adv_tokens, score_type):
+    output = targetLM.get_response(strs, max_n_tokens=1, adv_ids = adv_tokens)
     
     logprobs = [extract_logprob(output[i]['logprobs'][0], target_token) for i in range(len(strs))]
 
@@ -110,7 +112,7 @@ def run(goal, target,
     if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
-    
+            
     if (n_restarts > 1 or judge_max_n_calls > 1) and determinstic_jailbreak:
         print('Warning: probably you want to set determinstic_jailbreak to False to leverage randomness more strongly for random restarts / reevaluations.')
 
@@ -140,9 +142,13 @@ def run(goal, target,
     orig_msg = get_universal_manual_prompt(prompt_template, target, goal_modified.lower())
     print(f'Original message: {orig_msg}')
 
+    if monitor is not None:
+        if isinstance(monitor, TextMonitor):
+            monitor.set_kv_cache(orig_msg + " {optim_str}")
+            
     adv_init = get_adv_init(n_chars_change_max, n_tokens_change_max, targetLM, target_model, prompt_template, n_chars_adv, n_tokens_adv)
             
-    best_adv_tokens = adv_tokens = tokenizer.encode(adv_init)  #[:n_tokens_adv] 
+    best_adv_tokens = adv_tokens = tokenizer.encode(adv_init, return_tensors = 'pt')[:, 1:] #[:n_tokens_adv] 
     
     res_dict = {
         "optim_str" : [],
@@ -164,7 +170,7 @@ def run(goal, target,
         for it in range(1, n_iterations + 1):
             # note: to avoid an extra call to get_response(), for determinstic_jailbreak==True, the logprob_dict from the previous iteration is used 
             if not early_stopping_condition_with_monitor(best_scores, targetLM, logprob_dict, target_token, determinstic_jailbreak, monitor_loss):  
-                output = targetLM.get_response([msg], max_n_tokens=1)[0] 
+                output = targetLM.get_response([msg], max_n_tokens=1, adv_ids = adv_tokens)[0] 
                 
                 logprob_dict = output['logprobs'][0]
                 logprob = extract_logprob(logprob_dict, target_token)
@@ -173,7 +179,7 @@ def run(goal, target,
                 temperature = 0.0 if determinstic_jailbreak else 1.0
                 # we want to keep exploring when --determinstic_jailbreak=False since get_response() also updates logprobs
                 msg_early_stop = best_msg if determinstic_jailbreak else msg  
-                output = targetLM.get_response([msg_early_stop], max_n_tokens=target_max_n_tokens, temperature=temperature)[0]
+                output = targetLM.get_response([msg_early_stop], max_n_tokens=target_max_n_tokens, temperature=temperature, adv_ids = adv_tokens)[0]
                 
                 logprob_dict = output['logprobs'][0]
                 logprob = extract_logprob(logprob_dict, target_token)
@@ -220,13 +226,15 @@ def run(goal, target,
             for _ in range(search_width):
                 adv = mutate_str(tokenizer, n_chars_change_max, schedule_prob, schedule_n_to_change, n_tokens_change_max, adv, adv_tokens, best_score, targetLM, substitution_set, it, max_token_value)
                 advs.append(adv)
-            scores = eval_strs(targetLM, target_token, [insert_adv_string(orig_msg, adv) for adv in advs], score_type)
+                
+            batch_adv_ids =  tokenizer(advs, return_tensors = 'pt', padding = True, truncation = True)['input_ids'][:, 1:]
+            scores = eval_strs(targetLM, target_token, [insert_adv_string(orig_msg, adv) for adv in advs], batch_adv_ids, score_type)
             
             if max(scores) > best_score:
                 best_score = max(scores)
                 best_adv = advs[np.argmax(scores)]
                 best_msg = insert_adv_string(orig_msg, best_adv)
-                best_adv_tokens = tokenizer.encode(best_adv)
+                best_adv_tokens = tokenizer.encode(best_adv, return_tensors = 'pt')[:, 1:]
 
                 msg = best_msg
             else:

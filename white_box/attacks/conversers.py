@@ -178,7 +178,7 @@ class TargetLM():
         self.n_input_chars = 0
         self.n_output_chars = 0
 
-    def get_response(self, prompts_list, max_n_tokens : int = None, temperature : float = None):
+    def get_response(self, prompts_list, max_n_tokens : int = None, temperature : float = None, adv_ids = None):
         batchsize = len(prompts_list)
         convs_list = [conv_template(self.template) for _ in range(batchsize)]
         full_prompts = []
@@ -197,7 +197,8 @@ class TargetLM():
                                                         max_n_tokens = self.max_n_tokens if max_n_tokens is None else max_n_tokens,  
                                                         temperature = self.temperature if temperature is None else temperature,
                                                         top_p = self.top_p,
-                                                        monitor = self.monitor
+                                                        monitor = self.monitor,
+                                                        adv_ids = adv_ids
                                                     )
         self.n_input_tokens += sum(output['n_input_tokens'] for output in outputs)
         self.n_output_tokens += sum(output['n_output_tokens'] for output in outputs)

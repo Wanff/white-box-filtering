@@ -52,7 +52,7 @@ def parse_args():
     # Monitor Args
     parser.add_argument('--monitor_type', type = str, help = "can be act, act_rand, text, or none")
     parser.add_argument('--monitor_path', type = str, help = "path to monitor model")
-    parser.add_argument('--text_monitor_config', type = str, default='llamaguard+', help = "config for text monitor")
+    parser.add_argument('--text_monitor_config', type = str, default='llamaguard', help = "config for text monitor")
     parser.add_argument("--probe_layer", type = int, default = 24,
                         help="string appended to saved acts")
     parser.add_argument("--probe_type", type = str, default = "sk",
