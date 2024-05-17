@@ -10,6 +10,7 @@ from sklearn.metrics import auc as sklearn_auc
 import plotly.graph_objects as go
 import plotly.express as px
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 from white_box.dataset import PromptDist, ActDataset, create_prompt_dist_from_metadata_path, ProbeDataset
 
@@ -104,20 +105,24 @@ def plot_metric_by_category(res, layer, metric):
     # Show plot
     fig.show()
 
-def plot_dual_metric_by_category(res, layer, primary_metric, secondary_metric):
+def plot_dual_metric_by_category(res, dim, primary_metric, secondary_metric, layer=24): 
     categories = []
     primary_values = []
     secondary_values = []
     
     for cat, data in res.items():
+        if cat == 'misinformation_disinformation': 
+            cat = 'misinfo_disinfo'
+        if cat == 'chemical_biological': 
+            cat = 'chem_bio'
         categories.append(cat)
-        primary_values.append(np.round(data[primary_metric][layer], 3))
-        secondary_values.append(np.round(data[secondary_metric][layer], 3))
+        primary_values.append(np.round(data[primary_metric][dim], 3))
+        secondary_values.append(np.round(data[secondary_metric][dim], 3))
     
     # Create bar plots for both metrics
     fig = go.Figure(data=[
-        go.Bar(name=primary_metric, x=categories, y=primary_values, text=primary_values, textposition='auto', marker_color='blue'),
-        go.Bar(name=secondary_metric, x=categories, y=secondary_values, text=secondary_values, textposition='auto', marker_color='red')
+        go.Bar(name=primary_metric, x=categories, y=primary_values, text=primary_values, textposition='auto', textfont=dict(color='white')),
+        go.Bar(name=secondary_metric, x=categories, y=secondary_values, text=secondary_values, textposition='auto', textfont=dict(color='white'))
     ])
     
     # Update layout to have the bars grouped
@@ -125,12 +130,13 @@ def plot_dual_metric_by_category(res, layer, primary_metric, secondary_metric):
         barmode='group',
         title=f'Comparison of {primary_metric} and {secondary_metric} at Layer {layer}',
         xaxis_title='Category',
-        yaxis_title='Metric Value',
+        yaxis_title='Accuracy',
         template='plotly_white'
     )
     
     # Show plot
     fig.show()
+
 
 def plot_probe_on_test_dataset(probes, test_dataset, title='test'): 
     

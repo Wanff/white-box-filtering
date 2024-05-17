@@ -10,6 +10,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 # import Levenshtein
 import datasets
 from datasets import load_dataset
+from tqdm import tqdm
 
 
 def untuple(x):
@@ -243,3 +244,23 @@ def rotation_cipher(text, shift):
         else:
             shifted_text.append(char)
     return ''.join(shifted_text)
+
+@torch.no_grad()
+def get_batched_preds(prompts: List[str], model: torch.nn.Module, tokenizer: AutoTokenizer, template: str, device: str, batch_size: int = 8) -> np.ndarray:
+    
+    preds = []
+    for i in tqdm(range(0, len(prompts), batch_size)):
+        
+        current_batch_prompts = prompts[i:i+batch_size]
+        current_batch_prompts = [template.format(instruction=prompt) for prompt in current_batch_prompts]
+        toks = tokenizer(current_batch_prompts, return_tensors='pt', padding=True, truncation=True)
+        last_token_idxs = toks['attention_mask'].sum(1) - 1
+        
+        output = model(**toks.to(device))   
+        preds.append(torch.stack([output.logits[torch.arange(len(current_batch_prompts)), last_token_idxs, 9109], output.logits[torch.arange(len(current_batch_prompts)), last_token_idxs, 25110]], dim=1).softmax(-1).cpu().detach().numpy()[:, 1])
+        del toks
+        del output
+        torch.cuda.empty_cache()
+
+    return np.concatenate(preds)
+

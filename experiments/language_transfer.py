@@ -35,6 +35,9 @@ def main(args):
     if args.probe_dataset == 'jb_': 
         neg =  create_prompt_dist_from_metadata_path(args.orig_path + f'{args.probe_dataset}metadata.csv', col_filter = "(metadata['jb_name'] == 'harmless')")
         pos = create_prompt_dist_from_metadata_path(args.orig_path + f'{args.probe_dataset}metadata.csv', col_filter = "(metadata['jb_name'] == 'DirectRequest')")
+    elif args.probe_dataset == 'harmbench_alpaca_' or args.probe_dataset == 'generated_': 
+        neg = create_prompt_dist_from_metadata_path(args.orig_path + f'{args.probe_dataset}metadata.csv', col_filter = "(metadata['label'] == 0)")
+        pos = create_prompt_dist_from_metadata_path(args.orig_path + f'{args.probe_dataset}metadata.csv', col_filter = "(metadata['label'] == 1)")
     else: 
         raise NotImplementedError
     print(len(pos.idxs), len(neg.idxs))
@@ -42,8 +45,14 @@ def main(args):
     dataset.instantiate()
     probe_dataset = ProbeDataset(dataset)
 
-    neg =  create_prompt_dist_from_metadata_path(args.data_path + f'/{args.probe_dataset}metadata.csv', col_filter = "(metadata['jb_name'] == 'harmless')")
-    pos = create_prompt_dist_from_metadata_path(args.data_path + f'/{args.probe_dataset}metadata.csv', col_filter = "(metadata['jb_name'] == 'DirectRequest')")
+    if args.probe_dataset == 'jb_': 
+        neg =  create_prompt_dist_from_metadata_path(args.data_path + f'{args.probe_dataset}metadata.csv', col_filter = "(metadata['jb_name'] == 'harmless')")
+        pos = create_prompt_dist_from_metadata_path(args.data_path + f'{args.probe_dataset}metadata.csv', col_filter = "(metadata['jb_name'] == 'DirectRequest')")
+    elif args.probe_dataset == 'harmbench_alpaca_' or args.probe_dataset == 'generated_': 
+        neg = create_prompt_dist_from_metadata_path(args.data_path + f'{args.probe_dataset}metadata.csv', col_filter = "(metadata['label'] == 0)")
+        pos = create_prompt_dist_from_metadata_path(args.data_path + f'{args.probe_dataset}metadata.csv', col_filter = "(metadata['label'] == 1)")
+    else: 
+        raise NotImplementedError
     print(len(pos.idxs), len(neg.idxs))
     dataset = ActDataset([pos], [neg])
     dataset.instantiate()
@@ -56,7 +65,7 @@ def main(args):
     dataset.instantiate()
     nq_nm_probe_dataset = ProbeDataset(dataset)
 
-    # english model, english language
+    # english language, engilsh model
     acc, auc, probe = probe_dataset.train_sk_probe(args.layer, tok_idxs = list(range(5)), test_size = 0.1, C = 1e-3, max_iter = 2000)
     print(f'{args.probe_dataset} {args.probe_type} {args.layer} trained on english questions & english model {acc} {auc}')
 
@@ -84,8 +93,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='White-box language transfer')
     parser.add_argument('--orig_path', type=str, default='../data/llama2_7b/', help='Path to original data')
-    parser.add_argument('--data_path', type=str, default='../data/slovenian/', help='Path to data')
-    parser.add_argument('--probe_dataset', type=str, default='jb_', help='Probe dataset')
+    parser.add_argument('--data_path', type=str, default='../data/dutch/', help='Path to data')
+    parser.add_argument('--probe_dataset', type=str, default='harmbench_alpaca_', help='Probe dataset')
     parser.add_argument('--probe_type', type=str, default='sk', help='Probe type')
     parser.add_argument('--layer', type=int, default=24, help='Layer')
     parser.add_argument('--seed', type=int, default=0, help='Seed')

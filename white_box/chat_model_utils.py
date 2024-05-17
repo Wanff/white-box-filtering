@@ -77,13 +77,13 @@ MODEL_CONFIGS = {
     },
     "llamaguard-short": {
         "model_name_or_path": "meta-llama/LlamaGuard-7b", 
-        "dtype": "float16",
+        "dtype": "bfloat16",
         "chat_template": "llamaguard-short",
         "use_fast_tokenizer": False,
     }, 
     "llamaguard": {
         "model_name_or_path": "meta-llama/LlamaGuard-7b",
-        "dtype": "float16",
+        "dtype": "bfloat16",
         "chat_template": "llamaguard", 
         "use_fast_tokenizer": False,
     }

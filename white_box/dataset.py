@@ -529,13 +529,13 @@ class ProbeDataset():
         val_states = self.act_dataset.X[:,layer, tok_idxs]
         y_val = self.act_dataset.y
 
-        probas = probe.predict(val_states)
+        probas = probe.predict(val_states).detach().cpu()
         if pred_method == "mean":
             preds = (probas.mean(dim = 1) > thresh)
         elif pred_method == "any":
             preds = (probas.any(dim = 1))
         
-        
+        y_val = y_val.detach().cpu()
         acc = (preds == y_val).sum() / len(y_val)
-        auc = roc_auc_score(y_val.cpu().numpy(), probas.mean(dim = 1).detach().cpu().numpy())
+        auc = roc_auc_score(y_val, probas.mean(dim = 1))
         return acc, auc
