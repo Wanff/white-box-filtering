@@ -41,18 +41,16 @@ def main(args):
 
     model_config = MODEL_CONFIGS[args.model_name]
     model, tokenizer = load_model_and_tokenizer(**model_config)
-    model.config.use_cache = False
-    
+        
     if "llama3" not in args.model_name:
         template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))['prompt']
-
 
     dataset = load_dataset(args.dataset_name, split='train')
     dataset = dataset.filter(lambda x: len(x['input']) == 0)
     dataset = dataset.remove_columns('input')
+    dataset = dataset.shuffle(seed=args.seed)
 
     if args.subsample_size is not None:
-        dataset = dataset.shuffle(seed)
         dataset = dataset.select(range(args.subsample_size))
 
     if 'alpaca' in args.dataset_name: 
@@ -74,6 +72,7 @@ def main(args):
                 encoded_prompt_strs = [tokenizer.apply_chat_template(msg, tokenize = False) for msg in encoded_prompt_msgs]
                 
                 return {"text" : translate_prompt_strs + encoded_prompt_strs}
+            
             else:
                 if args.cipher == 'base64': 
                     instructions = [f'Only respond in base64. {base64.b64encode(instruction.encode()).decode()}' for instruction in instructions]
@@ -87,8 +86,12 @@ def main(args):
         
         dataset = dataset.map(instruction_format, batched=True, remove_columns = ['instruction', 'output'])
     
+    else: 
+        raise NotImplementedError
+    
     print(dataset[0])
     print(dataset[5])
+    raise Exception
 
     def tokenize_function(examples):
         return {'input_ids': tokenizer(examples['text'], truncation=True, max_length=512)['input_ids']}
@@ -106,7 +109,7 @@ def main(args):
         labels = torch.tensor(labels)
         return {'input_ids': input_ids, 'labels': labels}
     
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=custom_collator)
+    train_dataloader = DataLoader(train_dataset, batch_size=2, shuffle=True, collate_fn=custom_collator)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
     lr_scheduler = get_linear_schedule_with_warmup(
         optimizer=optimizer,
@@ -114,7 +117,7 @@ def main(args):
         num_training_steps=(len(train_dataloader) * num_epochs),
     )
 
-    model = model.to(args.device)
+    # model = model.to(args.device)
     model.train()
 
     for epoch in range(args.num_epochs):
@@ -123,13 +126,18 @@ def main(args):
         for step, batch in enumerate(pbar):
             batch = {k: v.to(args.device) for k, v in batch.items()}
             outputs = model(**batch)
+            
             loss = outputs.loss
-            print(loss)
-            total_loss += loss.detach().float()
+            loss = loss / args.accumulation_steps
             loss.backward()
-            optimizer.step()
-            lr_scheduler.step()
-            optimizer.zero_grad()
+            total_loss += loss.detach().float()
+            
+            if step % args.accumulation_steps == 0:
+                optimizer.step()
+                lr_scheduler.step()
+                optimizer.zero_grad()
+            
+            print(loss)
 
             torch.cuda.empty_cache()
             del batch
@@ -149,18 +157,22 @@ def main(args):
     print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 if __name__ == '__main__':
+
     parser = argparse.ArgumentParser()
-    parser.add_argument('--path', type=str, default='../data/llama3_8b', help='path to data')
-    parser.add_argument('--dataset_name', type=str, default='yahma/alpaca-cleaned', help='name of dataset')
-    parser.add_argument('--subsample_size', type=int, default=2500, help='size of subsample')
+    parser.add_argument('--model_name', type=str, default='llama3_8b', help='model name')
+    parser.add_argument('--dtype', type=str, default='bfloat16', help='dtype')
+    parser.add_argument('--path', type=str, default='../data/llama3_8b')
+    parser.add_argument('--train_file_spec', type=str, default='yahma/alpaca-cleaned')
     parser.add_argument('--cipher', type=str, default='rot_7', help='cipher')
     parser.add_argument('--output_name', type=str, default='alpaca_caesar7_llama3', help='name of output')
-    parser.add_argument('--model_name', type=str, default='llama3_8b', help='name of model')
     parser.add_argument('--seed', type=int, default=0, help='seed')
     parser.add_argument('--lr', type=float, default=1e-5, help='learning rate')
     parser.add_argument('--batch_size', type=int, default=1, help='batch size per device')
-    parser.add_argument('--num_epochs', type=int, default=2, help='number of epochs')
+    parser.add_argument('--accumulation_steps', type=int, default=16, help='accumulation steps')
+    parser.add_argument('--num_epochs', type=int, default=1, help='number of epochs')
     parser.add_argument('--device', type=str, default='cuda', help='device')
+    parser.add_argument('--subsample', type=int, default=None, help='subsample')
+    parser.add_argument('--no_save_at_end', action='store_true', default=False, help='save at end')
     args = parser.parse_args()
     
     set_seed(args.seed)
