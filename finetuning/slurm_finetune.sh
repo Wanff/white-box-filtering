@@ -2,8 +2,8 @@
 #SBATCH --nodes=1
 #SBATCH --gpus-per-node=1
 #SBATCH --time=02:00:00
-#SBATCH --job-name=llamaguard_generalization_test_on_all_others
-#SBATCH --output=llamaguard_generalization_test_on_all_others.out
+#SBATCH --job-name=rot7_finetune
+#SBATCH --output=rot7_finetune.out
 
 # for seed in 0 1 2 3 4; do
 #     python classifier_finetune.py \
@@ -33,18 +33,22 @@
 
 # TEST ON ALL OTHERS
 
-categories=("chemical_biological" "cybercrime_intrusion" "harassment_bullying" "harmful" "illegal" "misinformation_disinformation")
-test_file_specs=()
-for category in "${categories[@]}"; do
-    test_file_specs+=("${category}_test")
-done
-test_file_specs_str="${test_file_specs[@]}"
+# categories=("chemical_biological" "cybercrime_intrusion" "harassment_bullying" "harmful" "illegal" "misinformation_disinformation")
+# test_file_specs=()
+# for category in "${categories[@]}"; do
+#     test_file_specs+=("${category}_test")
+# done
+# test_file_specs_str="${test_file_specs[@]}"
 
-for train_category in "${categories[@]}"; do
-    python classifier_finetune.py \
-        --path "../data/llama2_7b/generalization/test_on_others" \
-        --train_file_spec "${train_category}_train" \
-        --test_file_spec ${test_file_specs_str} \
-        --no_save_at_end
-    echo "Done with training category $train_category on all test categories"
-done
+# for train_category in "${categories[@]}"; do
+#     python classifier_finetune.py \
+#         --path "../data/llama2_7b/generalization/test_on_others" \
+#         --train_file_spec "${train_category}_train" \
+#         --test_file_spec ${test_file_specs_str} \
+#         --no_save_at_end
+#     echo "Done with training category $train_category on all test categories"
+# done
+
+# CIPHER FINETUNE
+
+python cipher_finetune.py

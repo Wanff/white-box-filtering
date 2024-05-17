@@ -2,14 +2,14 @@
 #SBATCH --nodes=1
 #SBATCH --gpus-per-node=1
 #SBATCH --time=24:00:00
-#SBATCH --job-name=actual_final_gcg_just_hb_lyr24
-#SBATCH --output=actual_final_gcg_just_hb_lyr24.out
+#SBATCH --job-name=actual_final_gcg_just_hb_lyr24_new_hparam
+#SBATCH --output=actual_final_gcg_just_hb_lyr24_new_hparam.out
 
 SAVE_PATH="../data/llama2_7b"
 # FILE_SPEC="final_gcg_run_just_ft_llamaguard"
 
 # FILE_SPEC="gcg_gpt_gen_24_just_last_tok_n_replace1"
-FILE_SPEC="actual_final_gcg_just_hb_lyr24"
+FILE_SPEC="actual_final_gcg_just_hb_lyr24_new_hparam"
 python run_attack.py \
     --model_name "llama2_7b" \
     --save_path "$SAVE_PATH" \
