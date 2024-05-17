@@ -237,9 +237,13 @@ def run(goal, target,
                 best_adv_tokens = tokenizer.encode(best_adv, return_tensors = 'pt')[:, 1:]
 
                 msg = best_msg
+                adv = best_adv
+                adv_tokens = best_adv_tokens
             else:
                 # apply the new adversarial suffix
                 msg = insert_adv_string(orig_msg, advs[np.argmax(scores)]) 
+                adv = advs[np.argmax(scores)]
+                adv_tokens = tokenizer.encode(adv, return_tensors = 'pt')[:, 1:]
 
         if not eval_only_rs and i_restart == 0:  # eval only if it's the first restart
             # the outputs of some LLMs are non-determinstic, thus we might need to do extra work to ensure that the final response starts from "Sure"
