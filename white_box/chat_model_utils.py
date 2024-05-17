@@ -72,7 +72,7 @@ MODEL_CONFIGS = {
     "llama-2-7b-for-harm-classification": {
         "model_name_or_path": "meta-llama/Llama-2-7b-chat-hf",
         "dtype": "bfloat16",
-        "chat_template": "llama-2-for-harm-classification",
+        "chat_template": "llamaguard-short",
         "use_fast_tokenizer": False,
     },
     "llamaguard-short": {
@@ -322,8 +322,6 @@ def get_template(model_name_or_path=None, chat_template=None, fschat_template=No
         TEMPLATE = OASST_PROMPT_v1_1
     elif chat_template == "llama-2":
         TEMPLATE = LLAMA2_CHAT_PROMPT
-    elif chat_template == 'llama-2-for-harm-classification': 
-        TEMPLATE = LLAMAGUARD_PROMPT_SHORT
     elif chat_template == 'llamaguard-short': 
         TEMPLATE = LLAMAGUARD_PROMPT_SHORT
     elif chat_template == 'llamaguard': 

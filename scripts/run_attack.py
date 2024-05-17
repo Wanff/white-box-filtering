@@ -63,9 +63,9 @@ def parse_args():
     parser.add_argument("--probe_data_path", type = str, default = "../data/llama2_7b/jb_",
                         help="file spec for the acts/metadata used to train the probe")
     
-    parser.add_argument("--probe_reg", type = float, default = 1e-2,
+    parser.add_argument("--probe_reg", type = float, default = 1e-1,
                         help="regularization for the probe")
-    parser.add_argument("--max_iter", type = int, default = 2000,
+    parser.add_argument("--max_iter", type = int, default = 1000,
                         help="num iterations for the probe")
     
     args = parser.parse_args()
