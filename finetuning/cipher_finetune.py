@@ -44,7 +44,7 @@ def main(args):
     set_seed(seed)
 
     lr = args.lr
-    batch_size = args.batch_size
+    # batch_size = args.batch_size
     num_epochs = args.num_epochs
 
     peft_config = LoraConfig(
@@ -125,7 +125,7 @@ def main(args):
         labels = torch.tensor(labels)
         return {'input_ids': input_ids, 'labels': labels}
     
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=custom_collator)
+    train_dataloader = DataLoader(train_dataset, batch_size=2, shuffle=True, collate_fn=custom_collator)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
     lr_scheduler = get_linear_schedule_with_warmup(
         optimizer=optimizer,
@@ -133,35 +133,39 @@ def main(args):
         num_training_steps=(len(train_dataloader) * num_epochs),
     )
 
-    model = model.to(args.device)
+    # model = model.to(args.device)
     model.train()
 
-    with torch.autocast('cuda'): 
-        for epoch in range(args.num_epochs):
-            total_loss = 0
-            pbar = tqdm(train_dataloader)
-            for step, batch in enumerate(pbar):
-                batch = {k: v.to(args.device) for k, v in batch.items()}
-                outputs = model(**batch)
-                loss = outputs.loss
-                print(loss)
-                total_loss += loss.detach().float()
-                loss.backward()
+    for epoch in range(args.num_epochs):
+        total_loss = 0
+        pbar = tqdm(train_dataloader)
+        for step, batch in enumerate(pbar):
+            batch = {k: v.to(args.device) for k, v in batch.items()}
+            outputs = model(**batch)
+            
+            loss = outputs.loss
+            loss = loss / args.accumulation_steps
+            loss.backward()
+            total_loss += loss.detach().float()
+            
+            if step % args.accumulation_steps == 0:
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
+            
+            print(loss)
 
-                torch.cuda.empty_cache()
-                del batch
-                del outputs
-        
-                pbar.set_description(f"Step {step} | Loss: {loss}")
+            torch.cuda.empty_cache()
+            del batch
+            del outputs
+    
+            pbar.set_description(f"Step {step} | Loss: {loss}")
 
-            train_epoch_loss = total_loss / len(train_dataloader)
-            train_ppl = torch.exp(train_epoch_loss)
-            print(f"{epoch} | Train Loss: {train_epoch_loss} | Train PPL: {train_ppl}")
+        train_epoch_loss = total_loss / len(train_dataloader)
+        train_ppl = torch.exp(train_epoch_loss)
+        print(f"{epoch} | Train Loss: {train_epoch_loss} | Train PPL: {train_ppl}")
 
-            model.save_pretrained(os.path.join(args.path, args.output_name + '_final_adapter'))
+        model.save_pretrained(os.path.join(args.path, args.output_name + '_final_adapter'))
 
     # test on dataset[0]
     inputs = tokenizer(dataset[0]['text'], return_tensors='pt', padding=True, truncation=True)
@@ -178,7 +182,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_name', type=str, default='llama3_8b', help='name of model')
     parser.add_argument('--seed', type=int, default=0, help='seed')
     parser.add_argument('--lr', type=float, default=1e-5, help='learning rate')
-    parser.add_argument('--batch_size', type=int, default=1, help='batch size per device')
+    parser.add_argument('--accumulation_steps', type=int, default=8, help='batch size per device')
     parser.add_argument('--num_epochs', type=int, default=2, help='number of epochs')
     parser.add_argument('--device', type=str, default='cuda', help='device')
     args = parser.parse_args()
