@@ -34,6 +34,12 @@ MODEL_CONFIGS = {
         "dtype" : "float16",
         "chat_template" :"llama-2"
     },
+    "llama3_8b" : {
+        "model_name_or_path" : "meta-llama/Meta-Llama-3-8B-Instruct",
+        "use_fast_tokenizer" : False,
+        "dtype" : "float16",
+        "chat_template" : "meta-llama/Meta-Llama-3-8B-Instruct",
+    },
     "llama3_8b_cais" : {
         "model_name_or_path" : "/data/public_models/huggingface/meta-llama/Meta-Llama-3-8B-Instruct",
         "use_fast_tokenizer" : False,

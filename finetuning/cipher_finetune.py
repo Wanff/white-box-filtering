@@ -80,7 +80,7 @@ def main(args):
             instructions, outputs = examples['instruction'], examples['output']
             
             if "llama3" in args.model_name:
-                cipher_name = "base64" if args.cipher == "base64" else f"Caesar cipher with rotation {list(filter(str.isdigit, args.cipher.split()))[0]}"
+                cipher_name = "base64" if args.cipher == "base64" else f"Caesar cipher with rotation {args.cipher.split('_')[1]}"
                 translate_prompt_msgs = [ [{"role" : "system", "content": f"Translate this message from {cipher_name} to English"},
                             {"role":"user", "content" : encode_text(output, cipher = args.cipher)},
                             {"role" : "assistant", "content" : output}] for output in outputs]
@@ -104,10 +104,10 @@ def main(args):
             
                 return {'text': [template.format(instruction=instruction) + output for instruction, output in zip(instructions, outputs)]}
         
-        dataset = dataset.map(instruction_format, batched=True)
-        dataset = dataset.remove_columns(['instruction', 'output'])
+        dataset = dataset.map(instruction_format, batched=True, remove_columns = ['instruction', 'output'])
     
-    print(dataset[0:4])
+    print(dataset[0])
+    print(dataset[5])
 
     def tokenize_function(examples):
         return {'input_ids': tokenizer(examples['text'], truncation=True, max_length=512)['input_ids']}
@@ -170,16 +170,16 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--path', type=str, default='/data/oam_patel/white-box-filtering/data/llama3_8b', help='path to data')
+    parser.add_argument('--path', type=str, default='../data/llama3_8b', help='path to data')
     parser.add_argument('--dataset_name', type=str, default='yahma/alpaca-cleaned', help='name of dataset')
     parser.add_argument('--subsample_size', type=int, default=2500, help='size of subsample')
     parser.add_argument('--cipher', type=str, default='rot_7', help='cipher')
     parser.add_argument('--output_name', type=str, default='alpaca_caesar7_llama3', help='name of output')
-    parser.add_argument('--model_name', type=str, default='llama3_8b_cais', help='name of model')
+    parser.add_argument('--model_name', type=str, default='llama3_8b', help='name of model')
     parser.add_argument('--seed', type=int, default=0, help='seed')
     parser.add_argument('--lr', type=float, default=1e-5, help='learning rate')
-    parser.add_argument('--batch_size', type=int, default=8, help='batch size per device')
-    parser.add_argument('--num_epochs', type=int, default=1, help='number of epochs')
+    parser.add_argument('--batch_size', type=int, default=1, help='batch size per device')
+    parser.add_argument('--num_epochs', type=int, default=2, help='number of epochs')
     parser.add_argument('--device', type=str, default='cuda', help='device')
     args = parser.parse_args()
 
