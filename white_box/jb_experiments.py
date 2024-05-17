@@ -176,6 +176,7 @@ def results_given_probas(probas, labels):
     print(f"TNR: {((probas < 0.5) & (labels == 0)).sum() / (labels == 0).sum()}")
     print(f"FPR: {((probas > 0.5) & (labels == 0)).sum() / (labels == 0).sum()}")
     print(f"FNR: {((probas < 0.5) & (labels == 1)).sum() / (labels == 1).sum()}")
+    print(f"num errors: {((probas > 0.5) != labels).sum()}")
     
 def plot_roc_curves(preds, labels): 
     fpr, tpr, _ = roc_curve(labels, preds)
