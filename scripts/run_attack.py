@@ -30,8 +30,8 @@ from white_box.monitor import ActMonitor, TextMonitor
 from white_box.attacks.gcg import GCGConfig
 
 from white_box.attacks.gcg import run as run_gcg
-# from white_box.attacks.pair import run as run_pair
-# from white_box.attacks.log_prob_attack import run as run_log_prob
+from white_box.attacks.pair import run as run_pair
+from white_box.attacks.log_prob_attack import run as run_log_prob
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -52,7 +52,7 @@ def parse_args():
     # Monitor Args
     parser.add_argument('--monitor_type', type = str, help = "can be act, act_rand, text, or none")
     parser.add_argument('--monitor_path', type = str, help = "path to monitor model")
-    parser.add_argument('--text_monitor_config', type = str, default='llamaguard+', help = "config for text monitor")
+    parser.add_argument('--text_monitor_config', type = str, default='llamaguard', help = "config for text monitor")
     parser.add_argument("--probe_layer", type = int, default = 24,
                         help="string appended to saved acts")
     parser.add_argument("--probe_type", type = str, default = "sk",

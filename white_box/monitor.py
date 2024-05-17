@@ -35,6 +35,8 @@ class TextMonitor(Monitor):
         elif config_name == "llamaguard-short":
             self.instruction_prompt = LlamaGuardPlusConfig['instruction_prompt']
             self.model_name = "llamaguard-short"
+        else:
+            raise ValueError("Invalid config name")
         
         self.safe_tok_idx = safe_tok_idx
         self.unsafe_tok_idx = unsafe_tok_idx
@@ -153,7 +155,10 @@ class ActMonitor():
         if len(self.tok_idxs) > 1:
             return self.predict_proba(acts).mean(dim = -1)
         else:
-            return self.predict_proba(acts).squeeze()
+            if len(acts.shape) == 3:
+                return self.predict_proba(acts).squeeze(dim = 1)
+            else:
+                return self.predict_proba(acts)
 
     def get_loss_no_grad(self, acts : torch.Tensor): 
         return self.get_loss(acts)
