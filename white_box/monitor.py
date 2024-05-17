@@ -1,9 +1,12 @@
 import torch 
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoModelForSequenceClassification
 from typing import List, Union
+import numpy as np
+from tqdm import tqdm 
 
 from white_box.chat_model_utils import load_model_and_tokenizer, get_template, MODEL_CONFIGS
 from white_box.probes import Probe, LRProbe, MLP, MMProbe
+
 
 class Monitor:
     def predict_proba(self, data):
@@ -27,10 +30,10 @@ class TextMonitor(Monitor):
         
         if config_name == "llamaguard":
             self.instruction_prompt = None
-            self.model_name = "llama2_7b"
-        elif config_name == "llamaguard+":
+            self.model_name = "llamaguard"
+        elif config_name == "llamaguard-short":
             self.instruction_prompt = LlamaGuardPlusConfig['instruction_prompt']
-            self.model_name = "llama2_7b"
+            self.model_name = "llamaguard-short"
         
         self.safe_tok_idx = safe_tok_idx
         self.unsafe_tok_idx = unsafe_tok_idx
@@ -111,6 +114,32 @@ class TextMonitor(Monitor):
     def get_loss_no_grad(self, input_ids : torch.Tensor):
         return self.predict_proba(input_ids)
     
+    @torch.no_grad()
+    def get_batched_preds(self, prompts: List[str], batch_size: int = 8) -> np.ndarray:
+        template =  get_template(self.model_name, chat_template=MODEL_CONFIGS[self.model_name].get('chat_template', None))['prompt']
+        preds = []
+        for i in tqdm(range(0, len(prompts), batch_size)):
+            input_ids = []
+            last_token_idxs = []
+            for prompt in prompts[i:i+batch_size]:
+                if self.instruction_prompt is not None:
+                    prompt = self.instruction_prompt + prompt
+               
+                prompt = template.format(instruction=prompt)
+                input_ids.append(self.tokenizer(prompt)['input_ids'])
+                last_token_idxs.append(len(input_ids[-1]) - 1)
+        
+            padded = self.tokenizer.pad({'input_ids': input_ids}, return_tensors='pt')
+            input_ids = padded['input_ids']
+            attn_masks = padded['attention_mask']
+            output = self.model(input_ids.to(self.model.device), attention_mask=attn_masks.to(self.model.device))        
+            preds.append(torch.stack([output.logits[torch.arange(input_ids.shape[0]), last_token_idxs, 9109], output.logits[torch.arange(input_ids.shape[0]), last_token_idxs, 25110]], dim=1).softmax(-1).cpu().detach().numpy()[:, 1])
+            del input_ids
+            del output
+            torch.cuda.empty_cache()
+
+        return np.concatenate(preds)
+    
 class ActMonitor():
     def __init__(self, probe : Probe, layer : int, tok_idxs : List[int], monitor_type : str = "input"):
         self.probe = probe
@@ -121,6 +150,9 @@ class ActMonitor():
     def predict_proba(self, acts):
         return self.probe.predict_proba(acts.float())
 
+    def predict(self, acts):
+        return self.predict_proba(acts).squeeze(dim = 1) > 0.5
+    
     def get_loss(self, acts : torch.tensor):
         if len(self.tok_idxs) > 1:
             return self.predict_proba(acts).mean(dim = -1)
