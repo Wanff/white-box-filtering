@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --nodes=1
 #SBATCH --gpus-per-node=1
-#SBATCH --time=01:00:00
+#SBATCH --time=02:00:00
 #SBATCH --job-name=get_activations
 #SBATCH --output=get_activations.out
 
@@ -30,13 +30,17 @@
 #     echo "Done with $dataset"
 # done
 
-python get_activations.py \
-        --model_name "llama2_7b" \
-        --dataset_name_or_path "../data/llama2_7b/all_harmbench_alpaca_metadata.csv" \
-        --save_path "../data/llama2_7b/" \
-        --tok_idxs -1 -2 -3 -4 -5 \
-        --padding_side "right" \
-        --file_spec "all_harmbench_alpaca_"
+# GENERALIZATION
+
+# python get_activations.py \
+#         --model_name "llama2_7b" \
+#         --dataset_name_or_path "../data/llama2_7b/all_harmbench_alpaca_metadata.csv" \
+#         --save_path "../data/llama2_7b/" \
+#         --tok_idxs -1 -2 -3 -4 -5 \
+#         --padding_side "right" \
+#         --file_spec "all_harmbench_alpaca_"
+
+# ADVBENCH + CUSTOM GPT
 
 # python get_activations.py \
 #         --model_name "llama2_7b" \
@@ -54,6 +58,14 @@ python get_activations.py \
 #         --padding_side "right" \
 #         --file_spec "harmless_behaviors_"
 
+# FPR TUNING
+# python get_activations.py \
+#         --model_name "llama2_7b" \
+#         --dataset_name_or_path "../data/llama2_7b/alpaca_negatives_metadata.csv" \
+#         --save_path "../data/llama2_7b/" \
+#         --tok_idxs -1 -2 -3 -4 -5 \
+#         --padding_side "right" \
+#         --file_spec "alpaca_negatives_"
 
 # BATTERY FOR LANGUAGE EXPERIMENTS
 
