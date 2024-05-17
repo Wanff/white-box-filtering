@@ -6,20 +6,21 @@ import itertools
 import argparse 
 import pickle
 
+import sys
+sys.path.append('../') 
+
 from white_box.dataset import ProbeDataset, create_prompt_dist_from_metadata_path, ActDataset
 from white_box.monitor import TextMonitor, ActMonitor
 from white_box.chat_model_utils import MODEL_CONFIGS, load_model_and_tokenizer, get_template
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--layer", type=int, 
+    parser.add_argument("--layer", type=int, default = 24,
                         help="The name of the model")
-    parser.add_argument("--dataset_name_or_path", type=str, required=True,
-                        help="path to dataset or dataset name")
-    parser.add_argument("--save_path", type=str,
-                        help="The path for saving activations")
-    parser.add_argument("--file_spec", type =str, 
-                        help="string appended to saved acts")
+    parser.add_argument("--tok_idxs", type=int, default = -1,
+                        help="The name of the model")
+    parser.add_argument("--save_path", type=str, default = "../data/llama2_7b/decorrelation.pkl",
+                        help="The path for saving stuff")
 
     args = parser.parse_args()
     return args
@@ -149,18 +150,26 @@ def inter_probe_corr(ams, hb_test_probe_dataset, gpt_test_probe_dataset, jb_prob
 
 def load_tcs(neg_data : str = 'hb_alpaca'):
     tcs = []
-    for i in range(5):
-        model_config = MODEL_CONFIGS['llamaguard']
-        if neg_data == 'hb_alpaca':
-            model_name_or_path = f'OamPatel/LlamaGuard-harmbench-alpaca-{i}'
-        elif neg_data == 'gpt': 
-            model_name_or_path = f'OamPatel/LlamaGuard-gpt-{i}'
-        model, tokenizer = load_model_and_tokenizer(**model_config, padding_side='right', model_override = model_name_or_path)
-        template = get_template('llamaguard', chat_template=model_config.get('chat_template', None))['prompt']
+    # for i in range(5):
+    #     model_config = MODEL_CONFIGS['llamaguard']
+    #     if neg_data == 'hb_alpaca':
+    #         model_name_or_path = f'OamPatel/LlamaGuard-harmbench-alpaca-{i}'
+    #     elif neg_data == 'gpt': 
+    #         model_name_or_path = f'OamPatel/LlamaGuard-gpt-{i}'
+    #     model, tokenizer = load_model_and_tokenizer(**model_config, padding_side='right', model_override = model_name_or_path)
+    #     template = get_template('llamaguard', chat_template=model_config.get('chat_template', None))['prompt']
 
-        hb_tm = TextMonitor(model, tokenizer, config_name = "llamaguard")
-        tcs.append(hb_tm)
+    #     hb_tm = TextMonitor(model, tokenizer, config_name = "llamaguard")
+    #     tcs.append(hb_tm)
     
+    model_config = MODEL_CONFIGS['llamaguard']
+    model_config['dtype'] = 'float16'
+    model_name_or_path = f'OamPatel/LlamaGuard-harmbench-alpaca'
+    model, tokenizer = load_model_and_tokenizer(**model_config, padding_side='right', model_override = model_name_or_path)
+    template = get_template('llamaguard', chat_template=model_config.get('chat_template', None))['prompt']
+
+    hb_tm = TextMonitor(model, tokenizer, config_name = "llamaguard")
+    tcs.append(hb_tm)
     return tcs
 
 def inter_tc_corr(tcs, hb_df, gpt_df, jb_df):
@@ -209,6 +218,7 @@ def main():
     
     hb_test_probe_dataset, gpt_test_probe_dataset, jb_probe_dataset = load_probe_data() 
     hb_df, gpt_df, jb_df = load_tc_data()
+    
     pp_corr_hbs, pp_corr_gpts, pp_corr_jbs = inter_probe_corr(ams, hb_test_probe_dataset, gpt_test_probe_dataset, jb_probe_dataset)
     
     tt_corr_hbs, tt_corr_gpts, tt_corr_jbs = inter_tc_corr(tcs, hb_df, gpt_df, jb_df)
@@ -231,7 +241,8 @@ def main():
         pickle.dump(res, f)
     
     
-    
+if __name__ == "__main__":
+    main()
     
 
     
