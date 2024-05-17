@@ -18,8 +18,26 @@ from peft import get_peft_model, LoraConfig
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-def main(args): 
+def rotation_cipher(text, rotation):
+    result = ""
+    for char in text:
+        if char.isalpha():
+            ascii_offset = ord('a') if char.islower() else ord('A')
+            rotated_char = chr((ord(char) - ascii_offset + rotation) % 26 + ascii_offset)
+            result += rotated_char
+        else:
+            result += char
+    return result
 
+def encode_text(text, cipher):
+    if cipher == 'base64':
+        return base64.b64encode(text.encode()).decode()
+    elif cipher.startswith('rot'):
+        shift = int(args.cipher.split('_')[1])
+        return rotation_cipher(text, shift)
+    return text
+
+def main(args): 
     seed = args.seed
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -39,11 +57,11 @@ def main(args):
     )
 
     model_config = MODEL_CONFIGS[args.model_name]
-    tokenizer = AutoTokenizer.from_pretrained(model_config['model_name_or_path'])
-    model = AutoModelForCausalLM.from_pretrained(model_config['model_name_or_path'], token = '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')
+    model, tokenizer = load_model_and_tokenizer(**model_config)
     model.config.use_cache = False
-    tokenizer.pad_token = tokenizer.eos_token
-    template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))['prompt']
+    
+    if "llama3" not in args.model_name:
+        template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))['prompt']
 
     model = get_peft_model(model, peft_config)
     model.print_trainable_parameters()
@@ -60,21 +78,36 @@ def main(args):
 
         def instruction_format(examples): 
             instructions, outputs = examples['instruction'], examples['output']
-
-            if args.cipher == 'base64': 
-                instructions = [f'Only respond in base64. {base64.b64encode(instruction.encode()).decode()}' for instruction in instructions]
-                outputs = [base64.b64encode(output.encode()).decode() for output in outputs]
-            elif args.cipher.startswith('rot'): 
-                shift = int(args.cipher.split('_')[1])
-                instructions = [f'Only respond in ROT{shift}. E.g. a -> b, b -> c, c -> d, etc. {rotation_cipher(instruction, shift)}' for instruction in instructions]
-                outputs = [rotation_cipher(output, shift) for output in outputs]
             
-            return {'text': [template.format(instruction=instruction) + output for instruction, output in zip(instructions, outputs)]}
+            if "llama3" in args.model_name:
+                cipher_name = "base64" if args.cipher == "base64" else f"Caesar cipher with rotation {args.cipher.split('_')[1]}"
+                translate_prompt_msgs = [ [{"role" : "system", "content": f"Translate this message from {cipher_name} to English"},
+                            {"role":"user", "content" : encode_text(output, cipher = args.cipher)},
+                            {"role" : "assistant", "content" : output}] for output in outputs]
+                
+                translate_prompt_strs = [tokenizer.apply_chat_template(msg, tokenize = False) for msg in translate_prompt_msgs]
+
+                encoded_prompt_msgs = [ [{"role" : "system", "content": f"Respond only in {cipher_name}"},
+                            {"role": "user", "content" : encode_text(instruction, cipher = args.cipher)},
+                            {"role" : "assistant", "content" : encode_text(output, cipher = args.cipher)}] for instruction, output in zip(instructions, outputs)]
+                encoded_prompt_strs = [tokenizer.apply_chat_template(msg, tokenize = False) for msg in encoded_prompt_msgs]
+                
+                return {"text" : translate_prompt_strs + encoded_prompt_strs}
+            else:
+                if args.cipher == 'base64': 
+                    instructions = [f'Only respond in base64. {base64.b64encode(instruction.encode()).decode()}' for instruction in instructions]
+                    outputs = [base64.b64encode(output.encode()).decode() for output in outputs]
+                elif args.cipher.startswith('rot'): 
+                    shift = int(args.cipher.split('_')[1])
+                    instructions = [f'Only respond in ROT{shift}. E.g. a -> b, b -> c, c -> d, etc. {rotation_cipher(instruction, shift)}' for instruction in instructions]
+                    outputs = [rotation_cipher(output, shift) for output in outputs]
+            
+                return {'text': [template.format(instruction=instruction) + output for instruction, output in zip(instructions, outputs)]}
         
-        dataset = dataset.map(instruction_format, batched=True)
-        dataset = dataset.remove_columns(['instruction', 'output'])
+        dataset = dataset.map(instruction_format, batched=True, remove_columns = ['instruction', 'output'])
     
     print(dataset[0])
+    print(dataset[5])
 
     def tokenize_function(examples):
         return {'input_ids': tokenizer(examples['text'], truncation=True, max_length=512)['input_ids']}
@@ -137,16 +170,16 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--path', type=str, default='/data/oam_patel/white-box-filtering/data/ciphers/llama2_7b', help='path to data')
+    parser.add_argument('--path', type=str, default='../data/llama3_8b', help='path to data')
     parser.add_argument('--dataset_name', type=str, default='yahma/alpaca-cleaned', help='name of dataset')
-    parser.add_argument('--subsample_size', type=int, default=None, help='size of subsample')
-    parser.add_argument('--cipher', type=str, default='base64', help='cipher')
-    parser.add_argument('--output_name', type=str, default='alpaca_base64_model', help='name of output')
-    parser.add_argument('--model_name', type=str, default='llama2_7b', help='name of model')
+    parser.add_argument('--subsample_size', type=int, default=2500, help='size of subsample')
+    parser.add_argument('--cipher', type=str, default='rot_7', help='cipher')
+    parser.add_argument('--output_name', type=str, default='alpaca_caesar7_llama3', help='name of output')
+    parser.add_argument('--model_name', type=str, default='llama3_8b', help='name of model')
     parser.add_argument('--seed', type=int, default=0, help='seed')
     parser.add_argument('--lr', type=float, default=1e-5, help='learning rate')
-    parser.add_argument('--batch_size', type=int, default=8, help='batch size per device')
-    parser.add_argument('--num_epochs', type=int, default=1, help='number of epochs')
+    parser.add_argument('--batch_size', type=int, default=1, help='batch size per device')
+    parser.add_argument('--num_epochs', type=int, default=2, help='number of epochs')
     parser.add_argument('--device', type=str, default='cuda', help='device')
     args = parser.parse_args()
 
