@@ -146,7 +146,7 @@ if __name__=="__main__":
 
         mw = ModelWrapper(model, tokenizer, template = template)
         
-    advbench_behaviors = pd.read_csv("../data/harmful_behaviors_custom.csv")
+    advbench_behaviors = pd.read_csv("../datasets/harmful_behaviors_custom.csv")
     results = []
     
     config = json.load(open(args.attack_args_path, 'r'))

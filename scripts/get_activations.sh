@@ -22,7 +22,7 @@ for dataset in "${datasets[@]}"; do
     file_spec="${dataset%_metadata}"  # Removes '_metadata' from the dataset name to form the file_spec prefix
     python get_activations.py \
         --model_name "llama2_7b" \
-        --dataset_name_or_path "../data/llama2_7b/${dataset}.csv" \
+        --dataset_name_or_path "../datasets/${dataset}.csv" \
         --save_path "../data/llama2_7b/" \
         --tok_idxs -1 -2 -3 -4 -5 \
         --padding_side "right" \

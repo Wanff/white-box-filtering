@@ -6,8 +6,8 @@ import torch
 import torch.nn.functional as F
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from sentence_transformers import SentenceTransformer, util
-import Levenshtein
+# from sentence_transformers import SentenceTransformer, util
+# import Levenshtein
 import datasets
 from datasets import load_dataset
 
