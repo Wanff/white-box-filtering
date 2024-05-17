@@ -103,6 +103,7 @@ class HuggingFace(LanguageModel):
             elif isinstance(monitor, TextMonitor):
                 monitor_losses = monitor.get_loss(full_prompts_list)
             
+            # print(monitor_losses)
             for i, out in enumerate(outputs):
                 outputs[i]['monitor_loss'] = monitor_losses[i].item()
                 

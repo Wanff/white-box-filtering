@@ -1,7 +1,7 @@
 {
-    "score_type" : "both", 
+    "score_type" : "monitor", 
     "prompt_template": "best_llama2",
-    "n_iterations": 10000,
+    "n_iterations": 1000,
     "n_chars_adv": 100,
     "n_chars_change_max": 0,
     "n_tokens_adv": 25,
