@@ -473,15 +473,20 @@ class ProbeDataset():
                        return_torch_probe : bool = True,
                        random_state : int = 0,
                        device  = "cuda",
-                       use_train_test_split : bool = True
-                        ): 
+                       use_train_test_split : bool = True,
+                       shuffle : bool = False
+                        ): #no_test: haven't tested shuffle=True, use_train_test_split = True
+        if shuffle:
+            shuffle_indices = np.random.permutation(len(self.act_dataset.metadata_idxs))
+            self.act_dataset.X = self.act_dataset.X[shuffle_indices]
+            self.act_dataset.y = self.act_dataset.y[shuffle_indices]
+            
         if use_train_test_split:
             X_train, X_val, y_train, y_val = self.act_dataset.train_test_split(test_size = test_size, layer = layer, tok_idxs = tok_idxs, random_state = random_state)
         else:
             y_train, X_train = self.act_dataset.convert_states(self.act_dataset.X, self.act_dataset.y, tok_idxs = tok_idxs, layer = layer)
             X_val, y_val = X_train, y_train
         
-
         probe_lr = LogisticRegression(max_iter = max_iter, C = C)
         probe_lr.fit(X_train.numpy(), y_train.numpy())
 
