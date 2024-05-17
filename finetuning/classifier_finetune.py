@@ -128,7 +128,7 @@ def main(args):
         train_epoch_loss = total_loss / len(train_dataloader)
         print(f"{epoch} | Train Loss: {train_epoch_loss}")
          
-        model.save_pretrained(f'{args.path}/{args.model_name}_{args.file_spec}_model_{epoch}')
+        model.save_pretrained(f'{args.path}/{args.model_name}_{args.file_spec}_model_{epoch}_{args.seed}')
         
 if __name__ == '__main__':
 
@@ -140,7 +140,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=1e-5, help='learning rate')
     parser.add_argument('--batch_size', type=int, default=1, help='batch size per device')
     parser.add_argument('--accumulation_steps', type=int, default=16, help='accumulation steps')
-    parser.add_argument('--num_epochs', type=int, default=3, help='number of epochs')
+    parser.add_argument('--num_epochs', type=int, default=1, help='number of epochs')
     parser.add_argument('--device', type=str, default='cuda', help='device')
     args = parser.parse_args()
 

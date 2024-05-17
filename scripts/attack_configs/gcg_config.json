@@ -7,7 +7,7 @@
     "buffer_size": 16,
     "add_space_before_target": true,
     "device": "cuda",
-    "gcg_loss_weight": 0,
+    "gcg_loss_weight": 1,
     "monitor_loss_weight": 1,
     "use_search_width_sched": false,
     "use_n_replace_sched": false,
