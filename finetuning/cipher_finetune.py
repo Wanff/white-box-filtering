@@ -38,23 +38,6 @@ def encode_text(text, cipher):
     return text
 
 def main(args): 
-    seed = args.seed
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    set_seed(seed)
-
-    lr = args.lr
-    batch_size = args.batch_size
-    num_epochs = args.num_epochs
-
-    peft_config = LoraConfig(
-        target_modules=["a_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "embed_tokens", "Im_head"],
-        r=8,
-        lora_alpha=16,
-        lora_dropout=0.1,
-        bias="none",
-        task_type="CAUSAL_LM",
-    )
 
     model_config = MODEL_CONFIGS[args.model_name]
     model, tokenizer = load_model_and_tokenizer(**model_config)
@@ -63,8 +46,6 @@ def main(args):
     if "llama3" not in args.model_name:
         template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))['prompt']
 
-    model = get_peft_model(model, peft_config)
-    model.print_trainable_parameters()
 
     dataset = load_dataset(args.dataset_name, split='train')
     dataset = dataset.filter(lambda x: len(x['input']) == 0)
@@ -136,32 +117,31 @@ def main(args):
     model = model.to(args.device)
     model.train()
 
-    with torch.autocast('cuda'): 
-        for epoch in range(args.num_epochs):
-            total_loss = 0
-            pbar = tqdm(train_dataloader)
-            for step, batch in enumerate(pbar):
-                batch = {k: v.to(args.device) for k, v in batch.items()}
-                outputs = model(**batch)
-                loss = outputs.loss
-                print(loss)
-                total_loss += loss.detach().float()
-                loss.backward()
-                optimizer.step()
-                lr_scheduler.step()
-                optimizer.zero_grad()
+    for epoch in range(args.num_epochs):
+        total_loss = 0
+        pbar = tqdm(train_dataloader)
+        for step, batch in enumerate(pbar):
+            batch = {k: v.to(args.device) for k, v in batch.items()}
+            outputs = model(**batch)
+            loss = outputs.loss
+            print(loss)
+            total_loss += loss.detach().float()
+            loss.backward()
+            optimizer.step()
+            lr_scheduler.step()
+            optimizer.zero_grad()
 
-                torch.cuda.empty_cache()
-                del batch
-                del outputs
-        
-                pbar.set_description(f"Step {step} | Loss: {loss}")
+            torch.cuda.empty_cache()
+            del batch
+            del outputs
+    
+            pbar.set_description(f"Step {step} | Loss: {loss}")
 
-            train_epoch_loss = total_loss / len(train_dataloader)
-            train_ppl = torch.exp(train_epoch_loss)
-            print(f"{epoch} | Train Loss: {train_epoch_loss} | Train PPL: {train_ppl}")
+        train_epoch_loss = total_loss / len(train_dataloader)
+        train_ppl = torch.exp(train_epoch_loss)
+        print(f"{epoch} | Train Loss: {train_epoch_loss} | Train PPL: {train_ppl}")
 
-            model.save_pretrained(os.path.join(args.path, args.output_name + '_final_adapter'))
+        model.save_pretrained(os.path.join(args.path, args.output_name + '_final_adapter'))
 
     # test on dataset[0]
     inputs = tokenizer(dataset[0]['text'], return_tensors='pt', padding=True, truncation=True)
@@ -182,5 +162,8 @@ if __name__ == '__main__':
     parser.add_argument('--num_epochs', type=int, default=2, help='number of epochs')
     parser.add_argument('--device', type=str, default='cuda', help='device')
     args = parser.parse_args()
+    
+    set_seed(args.seed)
+
 
     main(args)

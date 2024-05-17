@@ -22,19 +22,24 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 def main(args):
     # load model
     model_config = MODEL_CONFIGS[args.model_name]
-    model = AutoModelForCausalLM.from_pretrained(model_config['model_name_or_path'], torch_dtype=_STR_DTYPE_TO_TORCH_DTYPE[model_config['dtype']])
+    model = AutoModelForCausalLM.from_pretrained(model_config['model_name_or_path'], torch_dtype=_STR_DTYPE_TO_TORCH_DTYPE[args.dtype])
     tokenizer = AutoTokenizer.from_pretrained(model_config['model_name_or_path'], padding_side='right')
     tokenizer.pad_token = tokenizer.eos_token
     model.config.pad_token_id = tokenizer.eos_token_id
     template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))['prompt']
 
     # load dataset
-    train_dataset = pd.read_csv(f'{args.path}/{args.file_spec}metadata.csv')
-    test_dataset = pd.read_csv(f'{args.path}/{args.file_spec}test_metadata.csv')
+    train_dataset = pd.read_csv(f'{args.path}/{args.train_file_spec}.csv')
+    test_datasets = [pd.read_csv(f'{args.path}/{x}.csv') for x in args.test_file_spec]
     
     # hf dataset
     train_dataset = Dataset.from_pandas(train_dataset)
-    test_dataset = Dataset.from_pandas(test_dataset)
+    test_datasets = [Dataset.from_pandas(x) for x in test_datasets]
+    
+    # subsample
+    if args.subsample is not None:
+        train_dataset = train_dataset.select(range(args.subsample))
+        test_datasets = [x.select(range(args.subsample)) for x in test_datasets]
     
     def custom_collator(examples):
         input_ids = []
@@ -51,19 +56,7 @@ def main(args):
         return {'input_ids': input_ids, 'labels': labels, 'last_token_idxs': last_token_idxs}
     
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=custom_collator)
-    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=custom_collator)
-
-    # lora 
-    # peft_config = LoraConfig(
-    #     target_modules=["a_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "embed_tokens", "score"],
-    #     r=8,
-    #     lora_alpha=16,
-    #     lora_dropout=0.1,
-    #     bias="none",
-    #     task_type=TaskType.SEQ_CLS, 
-    # )
-    # model = get_peft_model(model, peft_config)
-    # model.print_trainable_parameters()
+    test_dataloaders = {k:v for k,v in zip(args.test_file_spec, [DataLoader(x, batch_size=args.batch_size, shuffle=False, collate_fn=custom_collator) for x in test_datasets])}
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
     lr_scheduler = get_linear_schedule_with_warmup(
@@ -75,6 +68,7 @@ def main(args):
     model = model.to(args.device)
 
     for epoch in range(args.num_epochs):
+        
         total_loss = 0
         pbar = tqdm(train_dataloader)
         for step, batch in enumerate(pbar):
@@ -100,48 +94,56 @@ def main(args):
             del batch
             del outputs
     
-            pbar.set_description(f"Step {step} | Loss: {loss}")
+            # pbar.set_description(f"Step {step} | Loss: {loss}")
 
-        print("RUNNING EVAL")
-        acc = 0
-        model.eval()
-        for step, batch in enumerate(test_dataloader):
-            batch = {k: v.to(args.device) for k, v in batch.items()}
-            outputs = model(batch['input_ids'])
-            preds = torch.stack([outputs.logits[torch.arange(outputs.logits.shape[0]), batch['last_token_idxs'], 9109], outputs.logits[torch.arange(outputs.logits.shape[0]), batch['last_token_idxs'], 25110]], dim=1).softmax(-1)
-            # preds = outputs.logits
-            loss = F.cross_entropy(preds, batch['labels'])
-            preds = preds.argmax(-1)
-            acc += torch.sum(preds == batch['labels'])
-            total_loss += loss.detach().float()
-
-            torch.cuda.empty_cache()
-            del batch
-            del outputs
-    
-            pbar.set_description(f"Step {step} | Loss: {loss}")
-    
-        test_epoch_loss = total_loss / (len(test_dataloader) * args.batch_size)
-        test_acc = acc / (len(test_dataloader) * args.batch_size)
-        print(f"{epoch} | Test Loss: {test_epoch_loss} | Test Acc: {test_acc}")
 
         train_epoch_loss = total_loss / len(train_dataloader)
         print(f"{epoch} | Train Loss: {train_epoch_loss}")
-         
-        model.save_pretrained(f'{args.path}/{args.model_name}_{args.file_spec}_model_{epoch}_{args.seed}')
+        
+        print("RUNNING EVAL")
+        model.eval()
+        for test_file_spec, test_dataloader in test_dataloaders.items():
+            total_loss = 0
+            acc = 0
+            for step, batch in enumerate(test_dataloader):
+                batch = {k: v.to(args.device) for k, v in batch.items()}
+                outputs = model(batch['input_ids'])
+                preds = torch.stack([outputs.logits[torch.arange(outputs.logits.shape[0]), batch['last_token_idxs'], 9109], outputs.logits[torch.arange(outputs.logits.shape[0]), batch['last_token_idxs'], 25110]], dim=1).softmax(-1)
+                # preds = outputs.logits
+                loss = F.cross_entropy(preds, batch['labels'])
+                preds = preds.argmax(-1)
+                acc += torch.sum(preds == batch['labels'])
+                total_loss += loss.detach().float()
+
+                torch.cuda.empty_cache()
+                del batch
+                del outputs
+        
+                # pbar.set_description(f"Step {step} | Loss: {loss}")
+        
+            test_epoch_loss = total_loss / (len(test_dataloader) * args.batch_size)
+            test_acc = acc / (len(test_dataloader) * args.batch_size)
+            print(f"{epoch} | {test_file_spec} | Test Loss: {test_epoch_loss} | Test Acc: {test_acc}")
+        
+        if not args.no_save_at_end:
+            model.save_pretrained(f'{args.path}/{args.model_name}_{args.train_file_spec}_model_{epoch}_{args.seed}')
         
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_name', type=str, default='llamaguard', help='model name')
+    parser.add_argument('--dtype', type=str, default='bfloat16', help='dtype')
     parser.add_argument('--path', type=str, default='../data/llama2_7b')
-    parser.add_argument('--file_spec', type=str, default='harmbench_alpaca_')
+    parser.add_argument('--train_file_spec', type=str, default='harmbench_alpaca_metadata')
+    parser.add_argument('--test_file_spec', nargs='+', required=True, help='Specifications for the test files')
     parser.add_argument('--seed', type=int, default=0, help='seed')
     parser.add_argument('--lr', type=float, default=1e-5, help='learning rate')
     parser.add_argument('--batch_size', type=int, default=1, help='batch size per device')
     parser.add_argument('--accumulation_steps', type=int, default=16, help='accumulation steps')
     parser.add_argument('--num_epochs', type=int, default=1, help='number of epochs')
     parser.add_argument('--device', type=str, default='cuda', help='device')
+    parser.add_argument('--subsample', type=int, default=None, help='subsample')
+    parser.add_argument('--no_save_at_end', action='store_true', default=False, help='save at end')
     args = parser.parse_args()
 
     set_seed(args.seed)
