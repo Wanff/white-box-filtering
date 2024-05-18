@@ -68,7 +68,9 @@ def parse_args():
 def get_mw(args): 
     if args.model_name in MODEL_CONFIGS: # for chat_models
         model_config = MODEL_CONFIGS[args.model_name]
-        model, tokenizer = load_model_and_tokenizer(**model_config, device=args.device, padding_side = args.padding_side)
+        model_config['device'] = args.device
+        model_config['padding_side'] = args.padding_side
+        model, tokenizer = load_model_and_tokenizer(**model_config)
         if args.model_name == 'llama2_7b_dutch': 
             tokenizer.pad_token = '***'
             print(tokenizer(tokenizer.pad_token))

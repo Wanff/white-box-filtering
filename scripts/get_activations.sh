@@ -5,6 +5,7 @@
 #SBATCH --job-name=get_activations
 #SBATCH --output=get_activations.out
 
+
 # GENERALIZATION
 # python get_activations.py \
 #     --model_name "llama2_7b" \
@@ -112,3 +113,12 @@
 #             --tok_idxs -1 -2 -3 -4 -5 \
 #             --padding_side "right" \
 #             --file_spec "harmless_behaviors_custom_"
+
+#LLAMA2_13b
+python get_activations.py \
+        --model_name "llama2_13b" \
+        --dataset_name_or_path "../datasets/all_harmbench_alpaca_metadata.csv" \
+        --save_path "../data/llama2_13b/" \
+        --tok_idxs -1 -2 -3 -4 -5 \
+        --padding_side "right" \
+        --file_spec "all_harmbench_alpaca_"
