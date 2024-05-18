@@ -249,7 +249,7 @@ def run(goal, target,
             # the outputs of some LLMs are non-determinstic, thus we might need to do extra work to ensure that the final response starts from "Sure"
             for i in range(n_retry_final):
                 temperature = 0.0 if determinstic_jailbreak else 1.0
-                noadv_response_text = targetLM.get_response([orig_msg], max_n_tokens=target_max_n_tokens, temperature=temperature)[0]['text']
+                noadv_response_text = targetLM.get_response([orig_msg], max_n_tokens=target_max_n_tokens, temperature=temperature, adv_ids = adv_tokens)[0]['text']
                 if noadv_response_text.strip().startswith(target_token):
                     break
             llm_judge_score_noadv = judgeLM.score([goal], [noadv_response_text])[0]
@@ -258,7 +258,7 @@ def run(goal, target,
 
             for i in range(n_retry_final):
                 temperature = 0.0 if determinstic_jailbreak else 1.0
-                orig_response_text = targetLM.get_response([insert_adv_string(orig_msg, adv_init)], max_n_tokens=target_max_n_tokens, temperature=temperature)[0]['text']
+                orig_response_text = targetLM.get_response([insert_adv_string(orig_msg, adv_init)], max_n_tokens=target_max_n_tokens, temperature=temperature, adv_ids = adv_tokens)[0]['text']
                 if orig_response_text.strip().startswith(target_token):
                     break
             llm_judge_score_orig = judgeLM.score([goal], [orig_response_text])[0]
@@ -271,7 +271,7 @@ def run(goal, target,
         if not early_stop_rs:
             for i in range(n_retry_final):
                 # if we didn't find a jailbreak, then use temperature=1 to possibly find it within `n_retry_final` restarts
-                final_response_text = targetLM.get_response([best_msg], max_n_tokens=target_max_n_tokens, temperature=1)[0]['text']
+                final_response_text = targetLM.get_response([best_msg], max_n_tokens=target_max_n_tokens, temperature=1, adv_ids = adv_tokens)[0]['text']
                 if final_response_text.strip().startswith(target_token):
                     break
             llm_judge_score = judgeLM.score([goal], [final_response_text])[0]

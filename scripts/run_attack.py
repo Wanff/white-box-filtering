@@ -86,8 +86,12 @@ if __name__=="__main__":
             neg =  create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['jb_name'] == 'harmless')")
             pos = create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['jb_name'] == 'DirectRequest')")
         else: 
-            pos = create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['label'] == 1)")
-            neg =  create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['label'] == 0)")
+            if "all_harmbench_alpaca_" in args.probe_data_path:
+                pos =  create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['label'] == 1) & (metadata.index < 2400)")
+                neg =  create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['label'] == 0) & (metadata.index < 2400)")
+            else:
+                pos =  create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['label'] == 1)")
+                neg =  create_prompt_dist_from_metadata_path(f'{args.probe_data_path}metadata.csv', col_filter = "(metadata['label'] == 0)")
         print(len(pos.idxs), len(neg.idxs))
         dataset = ActDataset([pos], [neg])
         dataset.instantiate()
@@ -121,7 +125,7 @@ if __name__=="__main__":
                 model = model.merge_and_unload()
             else:
                 model = AutoModelForCausalLM.from_pretrained(args.monitor_path, 
-                    torch_dtype=torch.bfloat16, 
+                    torch_dtype=torch.float16, 
                     device_map="auto")
         else: 
             model = AutoModelForCausalLM.from_pretrained("meta-llama/LlamaGuard-7b", 
