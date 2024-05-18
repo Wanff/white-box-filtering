@@ -2,14 +2,18 @@
 #SBATCH --nodes=1
 #SBATCH --gpus-per-node=1
 #SBATCH --time=02:00:00
-#SBATCH --job-name=rot3_finetune
-#SBATCH --output=rot3_finetune.out
+#SBATCH --job-name=llama2_for_seq_finetune
+#SBATCH --output=llama2_for_seq_finetune.out
 
 # for seed in 0 1 2 3 4; do
 #     python classifier_finetune.py \
 #         --seed $seed
 #     echo "Done with seed $seed"
 # done
+
+# LLAMA2 INSTEAD OF LLAMAGUARD
+
+python classifier_finetune.py --head
 
 # CLASSIFIER GENERALIZATION
 
@@ -51,6 +55,6 @@
 #     echo "Done with training category $train_category on all test categories"
 # done
 
-# CIPHER FINETUNE
+# # CIPHER FINETUNE
 
-python cipher_finetune.py --save_per_epoch
+# python cipher_finetune.py --save_per_epoch

@@ -22,7 +22,10 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 def main(args):
     # load model
     model_config = MODEL_CONFIGS[args.model_name]
-    model = AutoModelForCausalLM.from_pretrained(model_config['model_name_or_path'], torch_dtype=_STR_DTYPE_TO_TORCH_DTYPE[args.dtype])
+    if args.head: 
+        model = AutoModelForSequenceClassification.from_pretrained(model_config['model_name_or_path'], num_labels=2, torch_dtype=_STR_DTYPE_TO_TORCH_DTYPE[args.dtype])
+    else: 
+        model = AutoModelForCausalLM.from_pretrained(model_config['model_name_or_path'], torch_dtype=_STR_DTYPE_TO_TORCH_DTYPE[args.dtype])
     tokenizer = AutoTokenizer.from_pretrained(model_config['model_name_or_path'], padding_side='right')
     tokenizer.pad_token = tokenizer.eos_token
     model.config.pad_token_id = tokenizer.eos_token_id
@@ -51,7 +54,10 @@ def main(args):
             last_token_idxs.append(len(input_ids[-1]) - 1)
         
         input_ids = tokenizer.pad({'input_ids': input_ids}, return_tensors='pt')['input_ids']
-        labels = torch.tensor([example['label'] for example in examples])
+        if args.head: 
+            labels = torch.tensor([0 if example['label'] == 'harmful' else 1 for example in examples])
+        else: 
+            labels = torch.tensor([example['label'] for example in examples])
         last_token_idxs = torch.tensor(last_token_idxs)
         return {'input_ids': input_ids, 'labels': labels, 'last_token_idxs': last_token_idxs}
     
@@ -77,10 +83,16 @@ def main(args):
             if step == 0: 
                 print(batch['input_ids'].shape, batch['labels'].shape)
                 print(tokenizer.decode(batch['input_ids'][0]))
-            outputs = model(batch['input_ids']) # b,s,v
-            preds = torch.stack([outputs.logits[torch.arange(outputs.logits.shape[0]), batch['last_token_idxs'], 9109], outputs.logits[torch.arange(outputs.logits.shape[0]), batch['last_token_idxs'], 25110]], dim=1).softmax(-1)
-            # preds = outputs.logits
-            loss = F.cross_entropy(preds, batch['labels'])
+            
+            if args.head: 
+                outputs = model(input_ids=batch['input_ids'], labels=batch['labels'])
+                loss = outputs.loss
+            else: 
+                outputs = model(batch['input_ids']) # b,s,v
+                preds = torch.stack([outputs.logits[torch.arange(outputs.logits.shape[0]), batch['last_token_idxs'], 9109], outputs.logits[torch.arange(outputs.logits.shape[0]), batch['last_token_idxs'], 25110]], dim=1).softmax(-1)
+                # preds = outputs.logits
+                loss = F.cross_entropy(preds, batch['labels'])
+            
             loss = loss / args.accumulation_steps
             loss.backward()
             total_loss += loss.detach().float()
@@ -96,7 +108,6 @@ def main(args):
     
             # pbar.set_description(f"Step {step} | Loss: {loss}")
 
-
         train_epoch_loss = total_loss / len(train_dataloader)
         print(f"{epoch} | Train Loss: {train_epoch_loss}")
         
@@ -107,10 +118,16 @@ def main(args):
             acc = 0
             for step, batch in enumerate(test_dataloader):
                 batch = {k: v.to(args.device) for k, v in batch.items()}
-                outputs = model(batch['input_ids'])
-                preds = torch.stack([outputs.logits[torch.arange(outputs.logits.shape[0]), batch['last_token_idxs'], 9109], outputs.logits[torch.arange(outputs.logits.shape[0]), batch['last_token_idxs'], 25110]], dim=1).softmax(-1)
-                # preds = outputs.logits
-                loss = F.cross_entropy(preds, batch['labels'])
+                if args.head: 
+                    outputs = model(input_ids=batch['input_ids'], labels=batch['labels'])
+                    preds = outputs.logits
+                    loss = outputs.loss
+                else: 
+                    outputs = model(batch['input_ids'])
+                    preds = torch.stack([outputs.logits[torch.arange(outputs.logits.shape[0]), batch['last_token_idxs'], 9109], outputs.logits[torch.arange(outputs.logits.shape[0]), batch['last_token_idxs'], 25110]], dim=1).softmax(-1)
+                    # preds = outputs.logits
+                    loss = F.cross_entropy(preds, batch['labels'])
+                    
                 preds = preds.argmax(-1)
                 acc += torch.sum(preds == batch['labels'])
                 total_loss += loss.detach().float()
@@ -132,10 +149,11 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_name', type=str, default='llama-2-7b-for-harm-classification', help='model name')
+    parser.add_argument('--head', action='store_true', default=False, help='head')
     parser.add_argument('--dtype', type=str, default='bfloat16', help='dtype')
     parser.add_argument('--path', type=str, default='../data/llama2_7b')
     parser.add_argument('--train_file_spec', type=str, default='harmbench_alpaca_metadata')
-    parser.add_argument('--test_file_spec', nargs='+', required=True, help='Specifications for the test files')
+    parser.add_argument('--test_file_spec', nargs='+', default=['harmbench_alpaca_test_metadata'])
     parser.add_argument('--seed', type=int, default=0, help='seed')
     parser.add_argument('--lr', type=float, default=1e-5, help='learning rate')
     parser.add_argument('--batch_size', type=int, default=1, help='batch size per device')
