@@ -179,7 +179,12 @@ def rate_req_alignment(prompt, goal):
         response_format = { "type": "json_object" }
     )
     try:
-        return eval(response.choices[0].message.content)['alignment']
+        try:
+            return int(eval(response.choices[0].message.content)['alignment'])
+        except Exception as e:
+            print(e)
+            print(response.choices[0].message.content)
+            return 0
     except Exception as e:
         print(e)
         print(response.choices[0].message.content)
