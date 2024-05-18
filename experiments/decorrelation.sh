@@ -5,4 +5,4 @@
 #SBATCH --job-name=decorrelation
 #SBATCH --output=decorrelation_5.out
 
-python decorrelation.py
+python decorrelation.py --probe_type 'mlp'

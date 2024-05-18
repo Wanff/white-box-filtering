@@ -24,7 +24,7 @@ def parse_args():
     parser.add_argument("--save_path", type=str, default = "../data/llama2_7b/decorrelation_5.pkl",
                         help="The path for saving stuff")
     parser.add_argument('--verbose', action='store_true', default = True)
-
+    parser.add_argument('--probe_type', type = str, default = 'sk')
     args = parser.parse_args()
     return args
 
@@ -77,7 +77,7 @@ def load_tc_data():
     
     return hb_df, gpt_df, jb_df
 
-def train_probes(N , layer , tok_idxs, which_compute_instance : str = 'cais'):
+def train_probes(N , layer , tok_idxs, probe_type='sk', which_compute_instance : str = 'cais'):
     data_path = "../data/llama2_7b"
     if which_compute_instance == 'aws':
         file_spec = "all_harmbench_alpaca_"
@@ -98,10 +98,19 @@ def train_probes(N , layer , tok_idxs, which_compute_instance : str = 'cais'):
             
     ams = []
     for _ in range(N):
-        acc, auc, probe = hb_alpaca_train_probe_dataset.train_sk_probe(layer, tok_idxs = tok_idxs, C = 1e-1, max_iter = 1000, 
-                                                                    use_train_test_split = False,
-                                                                    shuffle = True,
-                                                                    random_state = None)
+        if probe_type == "sk":
+            acc, auc, probe = hb_alpaca_train_probe_dataset.train_sk_probe(layer, tok_idxs = tok_idxs, C = 1e-1, max_iter = 1000, 
+                                                                        use_train_test_split = False,
+                                                                        shuffle = True,
+                                                                        random_state = None)
+        elif probe_type == 'mm': 
+            acc, auc, probe = hb_alpaca_train_probe_dataset.train_mm_probe(layer, tok_idxs = tok_idxs)
+        elif probe_type == 'mlp': 
+            acc, auc, probe = hb_alpaca_train_probe_dataset.train_mlp_probe(layer, tok_idxs=tok_idxs, test_size=None,
+                                                        weight_decay = 1, lr = 0.0001, epochs = 5000)
+        else: 
+            raise NotImplementedError
+        
         ams.append(ActMonitor(probe, layer = layer, tok_idxs = tok_idxs))
         
     return ams 
@@ -162,8 +171,6 @@ def intra_group_corr(errors: list):
         r = np.corrcoef(errors[i], errors[j])[0][1]
         if not np.isnan(r):
             corr.append(r)
-        else: 
-            corr.append(1)
     return corr
 
 def inter_group_corr(errors1: list, errors2: list):
@@ -173,8 +180,6 @@ def inter_group_corr(errors1: list, errors2: list):
             r = np.corrcoef(errors1[i], errors2[j])[0][1]
             if not np.isnan(r):
                 corr.append(r)
-            else: 
-                corr.append(1)
     return corr
 
 def inter_group_sum_corr(errors1: list, errors2: list):
@@ -182,22 +187,26 @@ def inter_group_sum_corr(errors1: list, errors2: list):
     errors2 = np.array(errors2).sum(axis = 0)
     
     r = np.corrcoef(errors1, errors2)[0][1]
-    return r if not np.isnan(r) else 1
+    return r if not np.isnan(r) else None
 
 def main():
     args = parse_args()
     print(args)
     
+    hb_test_probe_dataset, gpt_test_probe_dataset, jb_probe_dataset = load_probe_data() 
+    ams = train_probes(args.N, args.layer, [args.tok_idxs], probe_type=args.probe_type)
+    
     if os.path.exists(args.save_path): 
         with open(args.save_path, 'rb') as f:
             results = pickle.load(f)
         ams_hb_errs, ams_gpt_errs, ams_jb_errs, tcs_hb_errs, tcs_gpt_errs, tcs_jb_errs = results
+        ams_hb_errs = probe_errors(ams, hb_test_probe_dataset)
+        ams_gpt_errs = probe_errors(ams, gpt_test_probe_dataset)
+        ams_jb_errs = probe_errors(ams, jb_probe_dataset)
         
     else:
-        ams = train_probes(args.N, args.layer, [args.tok_idxs])
-        tcs = load_tcs(args.N)
         
-        hb_test_probe_dataset, gpt_test_probe_dataset, jb_probe_dataset = load_probe_data() 
+        tcs = load_tcs(args.N)
         hb_df, gpt_df, jb_df = load_tc_data()
         
         ams_hb_errs = probe_errors(ams, hb_test_probe_dataset)
