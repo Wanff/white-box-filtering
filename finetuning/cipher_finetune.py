@@ -47,8 +47,23 @@ def split_keep_delimiter(string, delimiter):
 def main(args): 
 
     model_config = MODEL_CONFIGS[args.model_name]
+    model_config['dtype'] = args.dtype
     model, tokenizer = load_model_and_tokenizer(**model_config)
         
+
+    if args.use_peft:
+        peft_config = LoraConfig(
+            target_modules=["a_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "embed_tokens", "Im_head"],
+            r=8,
+            lora_alpha=16,
+            lora_dropout=0.1,
+            bias="none",
+            task_type="CAUSAL_LM",
+        )
+
+        model = get_peft_model(model, peft_config)
+        model.print_trainable_parameters()
+    
     if "llama3" not in args.model_name:
         template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))['prompt']
 
@@ -97,22 +112,19 @@ def main(args):
         raise NotImplementedError
     
     dataset = dataset.shuffle(seed=args.seed)
-    
+    print(tokenizer.batch_decode(tokenizer(dataset[15]['text'], truncation = True, max_length = 1024)['input_ids']))
+
     dataset = dataset.train_test_split(test_size=0.1, seed=args.seed)
     train_dataset, test_dataset = dataset['train'], dataset['test']
     
     def custom_collator(examples):
         
-        # input_ids = []
-        # last_token_idxs = []
-        # for ex in examples: 
-        #     prompt = ex['text']
-        #     toks = tokenizer(prompt, return_tensors='pt')
-        #     # if len(toks['input_ids'][0]) > 512: 
-        #     #     toks['input_ids'] = toks['input_ids'][:, :512]
-                
-        #     input_ids.append(toks['input_ids'][0])
-        #     last_token_idxs.append(len(input_ids[-1]) - 1)
+        input_ids = []
+        last_token_idxs = []
+        for ex in examples: 
+            prompt = ex['text']
+            input_ids.append(tokenizer(prompt, truncation = True, max_length = 512)['input_ids'])
+            last_token_idxs.append(len(input_ids[-1]) - 1)
         
         # input_ids = tokenizer.pad({'input_ids': input_ids}, return_tensors='pt')['input_ids']
         input_ids = tokenizer([ex['text'] for ex in examples], padding=True, return_tensors='pt', truncation=True, max_length=256)['input_ids']
@@ -129,7 +141,7 @@ def main(args):
         num_training_steps=(len(train_dataloader) * args.num_epochs),
     )
 
-    model = model.to(args.device)
+    # model = model.to(args.device)
     model.train()
 
     for epoch in range(args.num_epochs):
@@ -148,7 +160,7 @@ def main(args):
             loss.backward()
             total_loss += loss.detach().float()
             
-            if step % args.accumulation_steps == 0:
+            if step % args.accumulation_steps == 0 and step != 0:
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
@@ -209,11 +221,13 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=0, help='seed')
     parser.add_argument('--lr', type=float, default=1e-5, help='learning rate')
     parser.add_argument('--batch_size', type=int, default=1, help='batch size per device')
-    parser.add_argument('--accumulation_steps', type=int, default=16, help='accumulation steps')
+    parser.add_argument('--accumulation_steps', type=int, default=8, help='accumulation steps')
     parser.add_argument('--num_epochs', type=int, default=1, help='number of epochs')
     parser.add_argument('--device', type=str, default='cuda', help='device')
     parser.add_argument('--subsample_size', type=int, default=2500, help='subsample')
     parser.add_argument('--save_per_epoch', action='store_true', default=False, help='save at end')
+    parser.add_argument('--use_peft', action='store_true', default=True, help='save at end')
+
     args = parser.parse_args()
     
     set_seed(args.seed)
