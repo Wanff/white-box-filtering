@@ -30,7 +30,7 @@ from white_box.monitor import ActMonitor, TextMonitor
 from white_box.attacks.gcg import GCGConfig
 
 from white_box.attacks.gcg import run as run_gcg
-from white_box.attacks.pair import run as run_pair
+# from white_box.attacks.pair import run as run_pair
 from white_box.attacks.log_prob_attack import run as run_log_prob
 
 def parse_args():

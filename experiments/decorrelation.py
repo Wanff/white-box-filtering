@@ -19,7 +19,9 @@ def parse_args():
                         help="The name of the model")
     parser.add_argument("--tok_idxs", type=int, default = -1,
                         help="The name of the model")
-    parser.add_argument("--save_path", type=str, default = "../data/llama2_7b/decorrelation.pkl",
+    parser.add_argument("--N", type=int, default = 5,
+                        help="The name of the model")
+    parser.add_argument("--save_path", type=str, default = "../data/llama2_7b/decorrelation_5.pkl",
                         help="The path for saving stuff")
     parser.add_argument('--verbose', action='store_true', default = True)
 
@@ -57,7 +59,7 @@ def load_probe_data():
 def load_tc_data():
     data_path = '../data/llama2_7b'
 
-    gpt_df = pd.read_csv(os.path.join(data_path, 'generated_test_metadata.csv')).iloc[:-4]
+    gpt_df = pd.read_csv(os.path.join(data_path, 'generated_test_metadata.csv'))
     print(len(gpt_df))
     hb_df = pd.read_csv(os.path.join(data_path, 'harmbench_alpaca_test_metadata.csv'))
     print(len(hb_df))
@@ -94,7 +96,6 @@ def train_probes(N , layer , tok_idxs, which_compute_instance : str = 'cais'):
         dataset.instantiate()
         hb_alpaca_train_probe_dataset = ProbeDataset(dataset)
             
-
     ams = []
     for _ in range(N):
         acc, auc, probe = hb_alpaca_train_probe_dataset.train_sk_probe(layer, tok_idxs = tok_idxs, C = 1e-1, max_iter = 1000, 
@@ -105,9 +106,9 @@ def train_probes(N , layer , tok_idxs, which_compute_instance : str = 'cais'):
         
     return ams 
 
-def load_tcs(neg_data : str = 'hb_alpaca'):
+def load_tcs(N, neg_data : str = 'hb_alpaca'):
     tcs = []
-    for i in range(5):
+    for i in range(N):
         model_config = MODEL_CONFIGS['llamaguard']
         if neg_data == 'hb_alpaca':
             model_name_or_path = f'../data/llama2_7b/llamaguard_harmbench_alpaca_metadata_model_0_{i}'
@@ -187,20 +188,29 @@ def main():
     args = parse_args()
     print(args)
     
-    ams = train_probes(5, args.layer, [args.tok_idxs])
-    tcs = load_tcs()
+    if os.path.exists(args.save_path): 
+        with open(args.save_path, 'rb') as f:
+            results = pickle.load(f)
+        ams_hb_errs, ams_gpt_errs, ams_jb_errs, tcs_hb_errs, tcs_gpt_errs, tcs_jb_errs = results
+        
+    else:
+        ams = train_probes(args.N, args.layer, [args.tok_idxs])
+        tcs = load_tcs(args.N)
+        
+        hb_test_probe_dataset, gpt_test_probe_dataset, jb_probe_dataset = load_probe_data() 
+        hb_df, gpt_df, jb_df = load_tc_data()
+        
+        ams_hb_errs = probe_errors(ams, hb_test_probe_dataset)
+        ams_gpt_errs = probe_errors(ams, gpt_test_probe_dataset)
+        ams_jb_errs = probe_errors(ams, jb_probe_dataset)
+        
+        tcs_hb_errs = tc_errors(tcs, hb_df)
+        tcs_gpt_errs = tc_errors(tcs, gpt_df)
+        tcs_jb_errs = tc_errors(tcs, jb_df)
     
-    hb_test_probe_dataset, gpt_test_probe_dataset, jb_probe_dataset = load_probe_data() 
-    hb_df, gpt_df, jb_df = load_tc_data()
-    
-    ams_hb_errs = probe_errors(ams, hb_test_probe_dataset)
-    ams_gpt_errs = probe_errors(ams, gpt_test_probe_dataset)
-    ams_jb_errs = probe_errors(ams, jb_probe_dataset)
-    
-    tcs_hb_errs = tc_errors(tcs, hb_df)
-    tcs_gpt_errs = tc_errors(tcs, gpt_df)
-    tcs_jb_errs = tc_errors(tcs, jb_df)
-    
+        with open(args.save_path, 'wb') as f:
+            pickle.dump((ams_hb_errs, ams_gpt_errs, ams_jb_errs, tcs_hb_errs, tcs_gpt_errs, tcs_jb_errs), f)
+        
     pp_hb_corr = intra_group_corr(ams_hb_errs)
     pp_gpt_corr = intra_group_corr(ams_gpt_errs)
     pp_jb_corr = intra_group_corr(ams_jb_errs)
@@ -233,19 +243,19 @@ def main():
     print(f"Probe-TC GPT Sum Corr: {tp_gpt_sum_corr}")
     print(f"Probe-TC JB Sum Corr: {tp_jb_sum_corr}")
     
-    if args.verbose: 
+    # if args.verbose: 
         
-        print(f"Probe-Probe HB: {pp_hb_corr}")
-        print(f"Probe-Probe GPT: {pp_gpt_corr}")
-        print(f"Probe-Probe JB: {pp_jb_corr}")
+    #     print(f"Probe-Probe HB: {pp_hb_corr}")
+    #     print(f"Probe-Probe GPT: {pp_gpt_corr}")
+    #     print(f"Probe-Probe JB: {pp_jb_corr}")
         
-        print(f"TC-TC HB: {tt_hb_corr}")
-        print(f"TC-TC GPT: {tt_gpt_corr}")
-        print(f"TC-TC JB: {tt_jb_corr}")
+    #     print(f"TC-TC HB: {tt_hb_corr}")
+    #     print(f"TC-TC GPT: {tt_gpt_corr}")
+    #     print(f"TC-TC JB: {tt_jb_corr}")
         
-        print(f"Probe-TC HB: {tp_hb_corr}")
-        print(f"Probe-TC GPT: {tp_gpt_corr}")
-        print(f"Probe-TC JB: {tp_jb_corr}")
+    #     print(f"Probe-TC HB: {tp_hb_corr}")
+    #     print(f"Probe-TC GPT: {tp_gpt_corr}")
+    #     print(f"Probe-TC JB: {tp_jb_corr}")
     
     
 if __name__ == "__main__":

@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --nodes=1
 #SBATCH --gpus-per-node=1
-#SBATCH --time=02:00:00
+#SBATCH --time=08:00:00
 #SBATCH --job-name=decorrelation
-#SBATCH --output=decorrelation.out
+#SBATCH --output=decorrelation_5.out
 
 python decorrelation.py

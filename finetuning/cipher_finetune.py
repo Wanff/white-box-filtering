@@ -126,7 +126,8 @@ def main(args):
             input_ids.append(tokenizer(prompt, truncation = True, max_length = 512)['input_ids'])
             last_token_idxs.append(len(input_ids[-1]) - 1)
         
-        input_ids = tokenizer.pad({'input_ids': input_ids}, return_tensors='pt')['input_ids']
+        # input_ids = tokenizer.pad({'input_ids': input_ids}, return_tensors='pt')['input_ids']
+        input_ids = tokenizer([ex['text'] for ex in examples], padding=True, return_tensors='pt', truncation=True, max_length=256)['input_ids']
         labels = input_ids.clone()
         labels[labels == tokenizer.pad_token_id] = -100
         return {'input_ids': input_ids, 'labels': labels}
@@ -215,8 +216,8 @@ if __name__ == '__main__':
     parser.add_argument('--dtype', type=str, default='bfloat16', help='dtype')
     parser.add_argument('--path', type=str, default='../data/llama3_8b/ciphers/')
     parser.add_argument('--dataset_name', type=str, default='yahma/alpaca-cleaned')
-    parser.add_argument('--cipher', type=str, default='rot_3', help='cipher')
-    parser.add_argument('--output_name', type=str, default='alpaca_caesar7_llama3', help='name of output')
+    parser.add_argument('--cipher', type=str, default='rot_7', help='cipher')
+    parser.add_argument('--output_name', type=str, default='alpaca_rot7_llama3', help='name of output')
     parser.add_argument('--seed', type=int, default=0, help='seed')
     parser.add_argument('--lr', type=float, default=1e-5, help='learning rate')
     parser.add_argument('--batch_size', type=int, default=1, help='batch size per device')
