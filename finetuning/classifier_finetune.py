@@ -31,6 +31,19 @@ def main(args):
     model.config.pad_token_id = tokenizer.eos_token_id
     template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))['prompt']
 
+    if args.use_peft:
+        peft_config = LoraConfig(
+            target_modules=["a_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "embed_tokens", "Im_head"],
+            r=8,
+            lora_alpha=16,
+            lora_dropout=0.1,
+            bias="none",
+            task_type="CAUSAL_LM",
+        )
+
+        model = get_peft_model(model, peft_config)
+        model.print_trainable_parameters()
+        
     # load dataset
     train_dataset = pd.read_csv(f'{args.path}/{args.train_file_spec}.csv')
     test_datasets = [pd.read_csv(f'{args.path}/{x}.csv') for x in args.test_file_spec]
@@ -55,7 +68,7 @@ def main(args):
         
         input_ids = tokenizer.pad({'input_ids': input_ids}, return_tensors='pt')['input_ids']
         if args.head: 
-            labels = torch.tensor([0 if example['label'] == 'harmful' else 1 for example in examples])
+            labels = torch.tensor([example['label'] for example in examples])
         else: 
             labels = torch.tensor([example['label'] for example in examples])
         last_token_idxs = torch.tensor(last_token_idxs)
@@ -86,7 +99,8 @@ def main(args):
             
             if args.head: 
                 outputs = model(input_ids=batch['input_ids'], labels=batch['labels'])
-                loss = outputs.loss
+                preds = outputs.logits.softmax(dim = -1)
+                loss = F.cross_entropy(preds, batch['labels'])
             else: 
                 outputs = model(batch['input_ids']) # b,s,v
                 preds = torch.stack([outputs.logits[torch.arange(outputs.logits.shape[0]), batch['last_token_idxs'], 9109], outputs.logits[torch.arange(outputs.logits.shape[0]), batch['last_token_idxs'], 25110]], dim=1).softmax(-1)
@@ -143,7 +157,7 @@ def main(args):
             print(f"{epoch} | {test_file_spec} | Test Loss: {test_epoch_loss} | Test Acc: {test_acc}")
         
         if not args.no_save_at_end:
-            model.save_pretrained(f'{args.path}/{args.model_name}_{args.train_file_spec}_model_{epoch}_{args.seed}')
+            model.save_pretrained(f'{args.path}/{args.model_name}_{"head" if args.head else "causal"}_{args.train_file_spec}_model_{epoch}_{args.seed}')
         
 if __name__ == '__main__':
 
@@ -162,6 +176,8 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default='cuda', help='device')
     parser.add_argument('--subsample_size', type=int, default=None, help='subsample')
     parser.add_argument('--no_save_at_end', action='store_true', default=False, help='save at end')
+    parser.add_argument('--use_peft', action='store_true', default=False, help='lora')
+
     args = parser.parse_args()
 
     set_seed(args.seed)

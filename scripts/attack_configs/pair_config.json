@@ -4,7 +4,7 @@
     "max_n_attack_attempts": 5,
     "target_model": "llama-2",
     "target_max_n_tokens": 150,
-    "judge_model": "gpt-3.5-turbo",
+    "judge_model": "rule-based",
     "judge_max_n_tokens": 50,
     "judge_temperature": 0,
     "n_streams": 3,

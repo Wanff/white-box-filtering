@@ -75,6 +75,12 @@ MODEL_CONFIGS = {
         "chat_template": "llamaguard-short",
         "use_fast_tokenizer": False,
     },
+    "llama-2-13b-for-harm-classification" : {
+        "model_name_or_path": "meta-llama/Llama-2-13b-chat-hf",  
+        "use_fast_tokenizer": False,
+        "dtype" : "bfloat16",
+        "chat_template" :"llamaguard-short"
+    },
     "llamaguard-short": {
         "model_name_or_path": "meta-llama/LlamaGuard-7b", 
         "dtype": "bfloat16",

@@ -71,7 +71,7 @@ def main(args):
     jb_labeled_by_success_probe_dataset = ProbeDataset(dataset)
     jb_labeled_by_success_metadata = jb_labeled_by_success_probe_dataset.metadata
     print(len(jb_labeled_by_success_metadata))
-    raise Exception
+
     final = defaultdict(defaultdict(list))
     for seed in range(5): 
         

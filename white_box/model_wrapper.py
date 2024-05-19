@@ -277,8 +277,8 @@ def slice_acts(out, N_TOKS: int, return_prompt_acts: bool, layers: List, tok_idx
     else:
         #first loop goes through the tokens, second loop goes through the layers or something
         acts = torch.stack([torch.cat(out.hidden_states[i], dim = 1) for i in range(1, N_TOKS)], dim = 1)  #1, N_TOKS bc the first index is all previous tokens
-        print(acts.shape)
         acts = rearrange(acts, 'b t l d -> b l t d')
+        # print(acts.shape)
 
     #shape: batch_size x N_TOKS - 1 x n_layers + 1 x d_M
     #n_layers + 1 bc of embedding, N_TOKS - 1 bc of how max_new_tokens works
@@ -286,9 +286,10 @@ def slice_acts(out, N_TOKS: int, return_prompt_acts: bool, layers: List, tok_idx
     if return_prompt_acts:
         prompt_acts = torch.stack(out.hidden_states[0], dim = 0) #shape: n_layers + 1 x batch_size x seq_len x d_M
         prompt_acts = rearrange(prompt_acts, 'l b t d -> b l t d')
-        print(prompt_acts.shape)
+        # print(prompt_acts.shape)
         acts = torch.cat([prompt_acts, acts], dim = 2)
     
+    # print(acts.shape)
     if device == 'cpu':
         acts = acts.cpu()
         
@@ -371,7 +372,10 @@ class ModelWrapper(torch.nn.Module):
     def process_prompts(self, prompts : Union[List[str], List[int]], use_chat_template : bool = True):
         if isinstance(prompts[0], str):
             if self.template is not None and use_chat_template:
-                prompts = [self.template.format(instruction=s) for s in prompts]
+                prompts = [self.template['prompt'].format(instruction=s) for s in prompts]
+            
+            print('batch hiddens')
+            print(prompts)
             inputs = self.tokenizer(prompts, return_tensors="pt", padding=True, max_length=2048, truncation=True)
         else:
             inputs = self.tokenizer.pad({'input_ids': prompts}, padding = True, return_attention_mask=True)

@@ -351,6 +351,10 @@ def run(
     for i in range(config.num_steps):
         optim_ids = buffer.get_best_ids()
         
+        optim_str = mw.tokenizer.decode(optim_ids.squeeze(0))
+        optim_strings.append(optim_str)
+        print(f"step: {i} | optim_str: {optim_str} | lowest loss after sample_id: {buffer.get_lowest_loss()}")
+
         # Create the one-hot encoding matrix of our optimized token ids
         optim_ids_onehot = torch.nn.functional.one_hot(optim_ids, num_classes=embedding_layer.num_embeddings)
         optim_ids_onehot = optim_ids_onehot.to(dtype=mw.model.dtype, device=mw.model.device)
@@ -487,9 +491,7 @@ def run(
             buffer.add(current_loss, optim_ids)
 
         optim_str = mw.tokenizer.batch_decode(buffer.get_best_ids())        
-        optim_strings.append(optim_str)
 
-        print(f"step: {i} | optim_str: {optim_str} | lowest loss after sample_id: {buffer.get_lowest_loss()}")
     
     return {
         "losses": losses,

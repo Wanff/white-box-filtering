@@ -10,7 +10,7 @@ def load_judge(judge_model : str, **kwargs):
     if "gpt" in judge_model:
         return GPTJudge(**kwargs)
     elif "rule-based" in judge_model:
-        return RuleJudge
+        return RuleJudge()
     else:
         raise NotImplementedError
     
@@ -72,11 +72,11 @@ class GPTJudge(JudgeBase):
         else:
             return outputs
 
-class RuleJudge(JudgeBase):
+class RuleJudge():
     def __init__(self):
         pass
     
-    def score(self, target_response_list):
+    def score(self, attack_prompt_list, target_response_list):
         outputs = [10 * judge_rule_based(response) for response in target_response_list]
         return outputs
         

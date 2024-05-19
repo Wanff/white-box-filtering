@@ -50,7 +50,6 @@ class HuggingFace(LanguageModel):
         input_ids = inputs["input_ids"]
 
         output_hidden_states = True if isinstance(monitor, ActMonitor) else False
-
         # Batch generation
         output = self.model.generate(
             **inputs,
@@ -95,14 +94,14 @@ class HuggingFace(LanguageModel):
         #* monitor stuff
         if monitor is not None:
             if isinstance(monitor, ActMonitor):
+                # print(torch.tensor(monitor.tok_idxs) - max_n_tokens + 1) #the + 1 is because if you only generate one token, huggingface doesnt structure the tuple differently.
                 monitor_input = slice_acts(output, 
                             N_TOKS = max_n_tokens, 
                             layers = monitor.layer,
-                            tok_idxs = torch.tensor(monitor.tok_idxs) - max_n_tokens if monitor.monitor_type == "input" else monitor.tok_idxs,
+                            tok_idxs = torch.tensor(monitor.tok_idxs) - max_n_tokens + 1 if monitor.monitor_type == "input" else monitor.tok_idxs,
                             return_prompt_acts = True if monitor.monitor_type == "input" else False)
                 monitor_losses = monitor.get_loss(monitor_input)
             elif isinstance(monitor, TextMonitor):
-                # print(adv_ids)
                 adv_ids = adv_ids.to(monitor.after_ids.device)
                 ids = torch.cat([adv_ids, monitor.after_ids.repeat(adv_ids.shape[0], 1)], dim=1)
                 # print(self.tokenizer.batch_decode(ids))
@@ -136,7 +135,6 @@ class GPT(LanguageModel):
     API_MAX_RETRY = 5
     API_TIMEOUT = 20
     
-    client = OpenAI(api_key = os.getenv("OPENAI_API_KEY"))
 
     def generate(self, conv: List[Dict], 
                 max_n_tokens: int, 
@@ -151,6 +149,7 @@ class GPT(LanguageModel):
         Returns:
             str: generated response
         '''
+        client = OpenAI(api_key = os.getenv("OPENAI_API_KEY"))
         output = self.API_ERROR_OUTPUT
         response = self.client.chat.completions.create(
                     model = self.model_name,

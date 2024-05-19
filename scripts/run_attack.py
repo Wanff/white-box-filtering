@@ -10,7 +10,7 @@ import time
 import datasets
 from datasets import load_dataset
 from dataclasses import dataclass
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSequenceClassification
 import argparse 
 import json
 from peft import AutoPeftModelForSequenceClassification, AutoPeftModelForCausalLM
@@ -124,9 +124,14 @@ if __name__=="__main__":
                     device_map="auto")
                 model = model.merge_and_unload()
             else:
-                model = AutoModelForCausalLM.from_pretrained(args.monitor_path, 
-                    torch_dtype=torch.float16, 
-                    device_map="auto")
+                if 'head' in args.text_monitor_config:
+                    model = AutoModelForSequenceClassification.from_pretrained(args.monitor_path, 
+                        torch_dtype=torch.float16, 
+                        device_map="auto")
+                else:
+                    model = AutoModelForCausalLM.from_pretrained(args.monitor_path, 
+                        torch_dtype=torch.float16, 
+                        device_map="auto")
         else: 
             model = AutoModelForCausalLM.from_pretrained("meta-llama/LlamaGuard-7b", 
                 torch_dtype=torch.float16, 
@@ -188,6 +193,8 @@ if __name__=="__main__":
             log_prob_config['target'] = row['target']
             attack_res = run_log_prob(**log_prob_config)  
         
+        attack_res['goal'] = row['goal']
+        attack_res['target'] = row['target']
         results.append(attack_res)
 
     with open(args.save_path + f"/{args.file_spec}.json", 'a') as f:

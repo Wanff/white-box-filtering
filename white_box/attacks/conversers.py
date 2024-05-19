@@ -191,7 +191,10 @@ class TargetLM():
                 full_prompts.append(conv.messages[-1][1])
             else:
                 conv.append_message(conv.roles[1], None) 
-                full_prompts.append(conv.get_prompt())
+                if 'llama2' in self.model_name:
+                    full_prompts.append(conv.get_prompt() + " ")
+        
+        # print(full_prompts)
         
         outputs = self.model.batched_generate(full_prompts, 
                                                         max_n_tokens = self.max_n_tokens if max_n_tokens is None else max_n_tokens,  
@@ -256,7 +259,7 @@ def get_model_path_and_template(model_name):
             "path":'lmsys/vicuna-7b-v1.5',
             "template":"vicuna_v1.1"
         },
-        "llama-2":{
+        "llama2_7b":{
             "path":'meta-llama/Llama-2-7b-chat-hf',
             "template":"llama-2"
         },
