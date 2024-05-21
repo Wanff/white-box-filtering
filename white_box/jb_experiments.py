@@ -204,3 +204,183 @@ def plot_roc_curves(preds, labels):
 
     plt.tight_layout()
     plt.show()
+
+#* Transfer Attacks
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, AutoModelForCausalLM
+import torch
+from typing import List, Dict, Optional, Union
+
+from white_box.monitor import TextMonitor 
+from white_box.chat_model_utils import MODEL_CONFIGS, get_template, load_model_and_tokenizer
+from white_box.model_wrapper import ModelWrapper
+
+from white_box.dataset import create_prompt_dist_from_metadata_path, ActDataset, ProbeDataset
+from white_box.monitor import ActMonitor
+from white_box.attacks.prompts import get_universal_manual_prompt
+
+
+def load_act_monitor(probe_data_path : str, probe_type : str, probe_layer : int = 24, tok_idxs : List[int] = [-1], probe_reg = 1e-1, max_iter = 1000):
+    layer = probe_layer
+    # if last 3 are 'jb_'
+    if probe_data_path[-3:] == 'jb_':
+        neg =  create_prompt_dist_from_metadata_path(f'{probe_data_path}metadata.csv', col_filter = "(metadata['jb_name'] == 'harmless')")
+        pos = create_prompt_dist_from_metadata_path(f'{probe_data_path}metadata.csv', col_filter = "(metadata['jb_name'] == 'DirectRequest')")
+    else: 
+        if "all_harmbench_alpaca_" in probe_data_path:
+            pos =  create_prompt_dist_from_metadata_path(f'{probe_data_path}metadata.csv', col_filter = "(metadata['label'] == 1) & (metadata.index < 2400)")
+            neg =  create_prompt_dist_from_metadata_path(f'{probe_data_path}metadata.csv', col_filter = "(metadata['label'] == 0) & (metadata.index < 2400)")
+        else:
+            pos =  create_prompt_dist_from_metadata_path(f'{probe_data_path}metadata.csv', col_filter = "(metadata['label'] == 1)")
+            neg =  create_prompt_dist_from_metadata_path(f'{probe_data_path}metadata.csv', col_filter = "(metadata['label'] == 0)")
+    print(len(pos.idxs), len(neg.idxs))
+    dataset = ActDataset([pos], [neg])
+    dataset.instantiate()
+    probe_dataset = ProbeDataset(dataset)
+
+    if probe_type == "sk":
+        acc, auc, probe = probe_dataset.train_sk_probe(layer, tok_idxs = [int(i) for i in tok_idxs], test_size = None, C = probe_reg, max_iter = max_iter, use_train_test_split=False, device='cuda')
+    elif probe_type == "mm":
+        acc, auc, probe = probe_dataset.train_mm_probe(layer, tok_idxs= [int(i) for i in tok_idxs], test_size=None)
+    elif probe_type == "mlp":
+        acc, auc, probe = probe_dataset.train_mlp_probe(layer, tok_idxs= [int(i) for i in tok_idxs], test_size=None,
+                                                        weight_decay = 1, lr = 0.0001, epochs = 5000)
+    print(acc, auc)
+    
+    monitor = ActMonitor(probe = probe, layer = layer, tok_idxs = [int(i) for i in tok_idxs])
+    return monitor
+
+def load_text_monitor():
+    model = AutoModelForCausalLM.from_pretrained("data/llama2_7b/llamaguard_harmbench_alpaca__model_0", 
+        torch_dtype=torch.float16, 
+        device_map="auto")
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        "meta-llama/LlamaGuard-7b",
+        use_fast = False,
+        padding_side = "right")
+    tokenizer.pad_token = tokenizer.eos_token
+    model.config.pad_token_id = tokenizer.pad_token_id
+    hb_tm = TextMonitor(model, tokenizer, config_name = "llamaguard")   
+    return hb_tm
+
+def load_mw(model_name):
+    model_config = MODEL_CONFIGS[model_name]
+    model, tokenizer = load_model_and_tokenizer(**model_config)
+    template = get_template(model_name, chat_template=model_config.get('chat_template', None))
+
+    mw = ModelWrapper(model, tokenizer, template = template)
+    return mw
+
+advbench_behaviors = pd.read_csv("datasets/harmful_behaviors_custom.csv")
+advbench_behaviors = advbench_behaviors.sample(frac=1, random_state = 0)
+
+class AttackTransferPortal:
+    def __init__(self, am, tm, mw,
+                am_log, tm_log):
+        self.am = am
+        self.tm = tm
+        self.mw = mw
+        
+        self.am_log = am_log
+        self.tm_log = tm_log
+    
+    def eval_on_str(self, prompt):
+        state = self.mw.batch_hiddens([prompt], use_chat_template = True)
+        am_loss = self.am.get_loss(state['resid'][:, self.am.layer]).item()
+        
+        self.tm.set_kv_cache(prompt + " {optim_str}", logging = False)
+        tm_loss = self.tm.get_loss_no_grad(self.tm.after_ids).item()
+        
+        return am_loss, tm_loss
+     
+    def check_transfer_logprob(self, adv_idx, step, transfer_from_am = True, logging = True, prompt_template = 'best_llama2'):
+        goal_modified = advbench_behaviors.iloc[adv_idx]['goal']
+        target = advbench_behaviors.iloc[adv_idx]['target']
+
+        orig_msg = get_universal_manual_prompt(prompt_template = 'best_llama2', target_str = target, goal = goal_modified.lower())
+
+        if transfer_from_am:
+            am_loss_from_log = self.am_log['monitor_losses'][adv_idx][step]
+            if logging:
+                print(f"AM Monitor Loss in Log {am_loss_from_log}")
+            adv_str = self.am_log['optim_strs'][adv_idx][step]
+            if isinstance(adv_str, List):
+                adv_str = adv_str[0]
+        else:
+            tm_loss_from_log = self.tm_log['monitor_losses'][adv_idx][step]
+            if logging:
+                print(f"TM Monitor Loss in Log {tm_loss_from_log}")
+            adv_str = self.tm_log['optim_strs'][adv_idx][step]
+
+        prompt = orig_msg + adv_str
+        state = self.mw.batch_hiddens([prompt], use_chat_template = True)
+        am_loss = self.am.get_loss(state['resid'][:, self.am.layer]).item()
+        
+        self.tm.set_kv_cache(orig_msg + " {optim_str}", logging = False)
+        adv_ids = self.tm.tokenizer(adv_str, return_tensors = 'pt')['input_ids'][:, 1:]
+        adv_ids = adv_ids.to(self.tm.after_ids.device)
+        ids = torch.cat([adv_ids, self.tm.after_ids.repeat(adv_ids.shape[0], 1)], dim=1)
+        tm_loss = self.tm.get_loss_no_grad(ids).item()
+        
+        if logging:
+            print(f"AM Monitor Loss {am_loss}")
+            print(f"TM Monitor Loss {tm_loss}")
+        
+        return am_loss, tm_loss
+    
+    def check_transfer_gcg(self, adv_idx, step, transfer_from_am : bool = True, logging : bool = True):
+        if transfer_from_am:
+            # print("Transfer from AM")
+            am_loss_from_log = self.am_log['monitor_losses'][adv_idx][step]
+            if logging:
+                print(f"AM Monitor Loss in Log {am_loss_from_log}")
+            
+            adv_str =  self.am_log['optim_strs'][adv_idx][step]
+            
+            if isinstance(adv_str, List):
+                adv_str = adv_str[0]
+                
+            prompt = advbench_behaviors.iloc[adv_idx]['goal'] + " " + adv_str
+            # print(prompt)
+        else:
+            # print("Transfer from TM")
+            tm_loss_from_log = self.tm_log['monitor_losses'][adv_idx][step]
+            if logging:
+                print(f"TM Monitor Loss in Log {tm_loss_from_log}")
+            
+            adv_str = self.tm_log['optim_strs'][adv_idx][step]
+            prompt = advbench_behaviors.iloc[adv_idx]['goal'] + " " + adv_str
+            # print(prompt)
+            
+        state = self.mw.batch_hiddens([prompt])
+        am_loss = self.am.get_loss(state['resid'][:, self.am.layer]).item()
+        
+        self.tm.set_kv_cache(advbench_behaviors.iloc[adv_idx]['goal'] + " {optim_str}", log = False)
+        self.tm.after_embeds = self.tm.model.get_input_embeddings()(self.tm.after_ids)
+
+        optim_ids = self.tm.tokenizer(adv_str, return_tensors = 'pt', add_special_tokens=False)['input_ids'].to(self.tm.device)
+        monitor_input_ids = torch.cat([optim_ids, self.tm.after_ids.repeat(optim_ids.shape[0], 1)], dim=1)
+        optim_embeds = self.tm.model.get_input_embeddings()(monitor_input_ids)
+        monitor_input = torch.cat([optim_embeds, self.tm.after_embeds], dim=1)
+
+        tm_loss = self.tm._predict_proba_from_embeds(monitor_input).item()
+        
+        if logging:
+            print(f"AM Monitor Loss {am_loss}")
+            print(f"TM Monitor Loss {tm_loss}")
+        
+        # if transfer_from_am:
+        #     # assert np.abs(am_loss - am_loss_from_log) < 0.1
+        #     if am_loss_from_log < 0.5:
+        #         assert am_loss < 0.5
+            
+        #     if am_loss < 0.5:
+        #         assert am_loss_from_log < 0.5
+        # else:
+        #     if tm_loss_from_log < 0.5:
+        #         assert tm_loss < 0.5
+        #     if tm_loss < 0.5:
+        #         assert tm_loss_from_log < 0.5
+        #     # assert np.abs(tm_loss - tm_loss_from_log) < 0.1
+        
+        return am_loss, tm_loss

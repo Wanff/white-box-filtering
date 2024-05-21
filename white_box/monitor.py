@@ -55,7 +55,7 @@ class TextMonitor(Monitor):
         
         self.monitor_type = monitor_type
         
-    def set_kv_cache(self, goal: str, log = True): 
+    def set_kv_cache(self, goal: str, logging = True): 
         if self.instruction_prompt is not None:
             template = get_template(self.model_name, chat_template=MODEL_CONFIGS[self.model_name].get('chat_template', None))['prompt']
             prompt = template.format(instruction=goal)
@@ -75,7 +75,7 @@ class TextMonitor(Monitor):
         self.after_ids = after_ids
         
         
-        if log:
+        if logging:
             print(f"Pre Instruction Ids Shape {pre_instruction_ids.shape}")
             print("BEGIN BEFORE")
             print(self.tokenizer.decode(self.before_ids[0]))
