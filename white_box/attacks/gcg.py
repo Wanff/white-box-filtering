@@ -192,7 +192,7 @@ def compute_candidates_loss(
                             return_prompt_acts = False,
                             device = model.device)
                 elif isinstance(monitor, TextMonitor):
-                    monitor_input = torch.cat([sampled_ids_batch, monitor.after_ids.repeat(search_batch_size, 1)], dim=1)
+                    monitor_input = torch.cat([sampled_ids_batch, monitor.after_ids.repeat(sampled_ids_batch.shape[0], 1)], dim=1)
             
                 monitor_loss = monitor.get_loss_no_grad(monitor_input)
                 del monitor_input

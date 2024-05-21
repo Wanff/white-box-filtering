@@ -2,8 +2,8 @@
 #SBATCH --nodes=1
 #SBATCH --gpus-per-node=1
 #SBATCH --time=02:00:00
-#SBATCH --job-name=llama13b
-#SBATCH --output=llama13b.out
+#SBATCH --job-name=gemma-2b
+#SBATCH --output=gemma-2b.out
 
 # for seed in 0 1 2 3 4; do
 #     python classifier_finetune.py \
@@ -11,12 +11,22 @@
 #     echo "Done with seed $seed"
 # done
 
+# SMALL CLASSIFIER FINETUNE
+
+for seed in 0 1 2 3 4; do
+    python classifier_finetune.py \
+        --seed $seed \
+        --model_name "gemma-2b" \
+        --head
+    echo "Done with seed $seed"
+done
+
 # LLAMA2 INSTEAD OF LLAMAGUARD
 
 # python classifier_finetune.py --head
 
 #LLAMA2-13b
-python classifier_finetune.py --model_name "llama-2-13b-for-harm-classification" --path "../data/llama2_13b" --use_peft
+# python classifier_finetune.py --model_name "llama-2-13b-for-harm-classification" --path "../data/llama2_13b" --use_peft
 
 
 # CLASSIFIER GENERALIZATION

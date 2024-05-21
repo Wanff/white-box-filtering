@@ -7,3 +7,4 @@ figures/
 *.log
 .apikey
 transformer-interpretability-dbc3a54ad3bd.json
+plots/

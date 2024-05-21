@@ -55,7 +55,7 @@ class TextMonitor(Monitor):
         
         self.monitor_type = monitor_type
         
-    def set_kv_cache(self, goal: str): 
+    def set_kv_cache(self, goal: str, log = True): 
         if self.instruction_prompt is not None:
             template = get_template(self.model_name, chat_template=MODEL_CONFIGS[self.model_name].get('chat_template', None))['prompt']
             prompt = template.format(instruction=goal)
@@ -68,18 +68,19 @@ class TextMonitor(Monitor):
         
         pre_instruction_ids = self.tokenizer(before, return_tensors="pt")['input_ids'].to(self.model.device)
         after_ids = self.tokenizer(after, add_special_tokens=False, return_tensors="pt")['input_ids'].to(self.model.device)
-        
-        print(pre_instruction_ids.shape)
 
         self.before_str = before
         self.after_str = after
         self.before_ids = pre_instruction_ids
         self.after_ids = after_ids
         
-        print("BEGIN BEFORE")
-        print(self.tokenizer.decode(self.before_ids[0]))
-        print("BEGIN AFTER")
-        print(self.tokenizer.decode(self.after_ids[0]))
+        
+        if log:
+            print(f"Pre Instruction Ids Shape {pre_instruction_ids.shape}")
+            print("BEGIN BEFORE")
+            print(self.tokenizer.decode(self.before_ids[0]))
+            print("BEGIN AFTER")
+            print(self.tokenizer.decode(self.after_ids[0]))
         
         with torch.no_grad():
             output = self.model(self.before_ids, use_cache=True)
@@ -145,8 +146,9 @@ class TextMonitor(Monitor):
             
             current_batch_prompts = prompts[i:i+batch_size]
             if self.instruction_prompt is not None: 
-                current_batch_prompts = [self.instruction_prompt + prompt for prompt in current_batch_prompts]
-            current_batch_prompts = [template.format(instruction=prompt) for prompt in current_batch_prompts]
+                template = get_template(self.model_name, chat_template=MODEL_CONFIGS[self.model_name].get('chat_template', None))['prompt']
+                current_batch_prompts = [template.format(instruction=prompt) for prompt in current_batch_prompts]
+            print(current_batch_prompts[0])
             toks = self.tokenizer(current_batch_prompts, return_tensors='pt', padding=True, truncation=True)
             last_token_idxs = toks['attention_mask'].sum(1) - 1
             

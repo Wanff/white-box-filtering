@@ -29,17 +29,23 @@ from white_box.dataset import PromptDist, ActDataset, create_prompt_dist_from_me
 from white_box.probes import LRProbe
 from white_box.monitor import ActMonitor, TextMonitor
 
-def main(): 
+def main(args): 
+    
+    set_seed(args.seed)
     
     model_config = MODEL_CONFIGS['llamaguard']
-    model, tokenizer = load_model_and_tokenizer(**model_config, padding_side='right', model_override = f'../data/llama2_7b/llamaguard_harmbench_alpaca_metadata_model_0_0')
+    model, tokenizer = load_model_and_tokenizer(**model_config, padding_side='right', model_override = f'../data/llama2_7b/llamaguard_harmbench_alpaca_metadata_model_0_{args.seed}')
     template = get_template('llamaguard', chat_template=model_config.get('chat_template', None))['prompt']
 
     alpaca_negatives = pd.read_csv('../data/llama2_7b/alpaca_negatives_metadata.csv')['prompt'].tolist()
     preds = get_batched_preds(alpaca_negatives, model, tokenizer, template, 'cuda', batch_size=16)
-    np.save(f'../data/llama2_7b/alpaca_negatives_preds.npy', preds)
-
-    set_seed(0)
+    np.save(f'../data/llama2_7b/alpaca_negatives_preds_{args.seed}.npy', preds)
     
 if __name__ == '__main__':
-    main()
+    
+    # get first arg 
+    parser = argparse.ArgumentParser(description='Get FPR preds')
+    parser.add_argument('--seed', type=int, default=0)
+    args = parser.parse_args()
+    
+    main(args)

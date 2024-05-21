@@ -228,9 +228,10 @@ def load_indiv_model(model_name, device=None):
             use_fast=False
         ) 
 
-        if 'llama-2' in model_path.lower():
+        if 'llama2' in model_path.lower():
             tokenizer.pad_token = tokenizer.unk_token
             tokenizer.padding_side = 'left'
+            
         if 'vicuna' in model_path.lower():
             tokenizer.pad_token = tokenizer.eos_token
             tokenizer.padding_side = 'left'
@@ -262,6 +263,10 @@ def get_model_path_and_template(model_name):
         "llama2_7b":{
             "path":'meta-llama/Llama-2-7b-chat-hf',
             "template":"llama-2"
+        },
+        "llama2_13b":{
+            "path" : 'meta-llama/Llama-2-13b-chat-hf',
+            "template" : 'llama-2'
         },
         "claude-instant-1":{
             "path":"claude-instant-1",

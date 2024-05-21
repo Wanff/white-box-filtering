@@ -447,9 +447,9 @@ class ProbeDataset():
                             device='cuda',
                             random_state = 0,
                             use_train_test_split = True,
-                            lr : float = 0.001, 
-                            weight_decay : float = 0.1,
-                            epochs : int = 1000,
+                            lr : float = 1e-4,
+                            weight_decay : float = 1,
+                            epochs : int = 5000,
                        ):
         #TODO: FIX
         if use_train_test_split:

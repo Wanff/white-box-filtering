@@ -205,13 +205,14 @@ def tc_preds(tcs: list, df: pd.DataFrame):
 def intra_group_corr(preds: list, labels: list): 
     
     errors = (preds > 0.5) != labels
+    mean_num_errors = np.mean([np.sum(e) for e in errors])
         
     corr = []
     for i, j in itertools.combinations(range(len(errors)), 2):
         r = np.corrcoef(errors[i], errors[j])[0][1]
         if not np.isnan(r):
             corr.append(r)
-    return corr
+    return corr, mean_num_errors
 
 def inter_group_corr(preds1, preds2, labels): 
     
@@ -311,25 +312,31 @@ def main():
     print(f"TT JB Acc: {np.mean(tt_jb_acc)} +/- {np.std(tt_jb_acc)}")
 
     # decorrelation
-    pp_hb_corr = intra_group_corr(ams_hb_preds, hb_labels)
-    pp_gpt_corr = intra_group_corr(ams_gpt_preds, gpt_labels)
-    pp_jb_corr = intra_group_corr(ams_jb_preds, jb_labels)
+    pp_hb_corr, pp_hb_errs = intra_group_corr(ams_hb_preds, hb_labels)
+    pp_gpt_corr, pp_gpt_errs = intra_group_corr(ams_gpt_preds, gpt_labels)
+    pp_jb_corr, pp_jb_errs = intra_group_corr(ams_jb_preds, jb_labels)
     
-    tt_hb_corr = intra_group_corr(tcs_hb_preds, hb_labels)
-    tt_gpt_corr = intra_group_corr(tcs_gpt_preds, gpt_labels)
-    tt_jb_corr = intra_group_corr(tcs_jb_preds, jb_labels)
+    tt_hb_corr, tt_hb_errs = intra_group_corr(tcs_hb_preds, hb_labels)
+    tt_gpt_corr, tt_gpt_errs = intra_group_corr(tcs_gpt_preds, gpt_labels)
+    tt_jb_corr, tt_jb_errs = intra_group_corr(tcs_jb_preds, jb_labels)
     
     tp_hb_corr = inter_group_corr(ams_hb_preds, tcs_hb_preds, hb_labels)
     tp_gpt_corr = inter_group_corr(ams_gpt_preds, tcs_gpt_preds, gpt_labels)
     tp_jb_corr = inter_group_corr(ams_jb_preds, tcs_jb_preds, jb_labels)
     
     print(f"PP HB Corr: {np.mean(pp_hb_corr)}")
+    print(f"PP HB Errors: {np.mean(pp_hb_errs)}")
     print(f"PP GPT Corr: {np.mean(pp_gpt_corr)}")
+    print(f"PP GPT Errors: {np.mean(pp_gpt_errs)}")
     print(f"PP JB Corr: {np.mean(pp_jb_corr)}")
+    print(f"PP JB Errors: {np.mean(pp_jb_errs)}")
     
     print(f"TT HB Corr: {np.mean(tt_hb_corr)}")
+    print(f"TT HB Errors: {np.mean(tt_hb_errs)}")
     print(f"TT GPT Corr: {np.mean(tt_gpt_corr)}")
+    print(f"TT GPT Errors: {np.mean(tt_gpt_errs)}")
     print(f"TT JB Corr: {np.mean(tt_jb_corr)}")
+    print(f"TT JB Errors: {np.mean(tt_jb_errs)}")
     
     print(f"TP HB Corr: {np.mean(tp_hb_corr)}")
     print(f"TP GPT Corr: {np.mean(tp_gpt_corr)}")

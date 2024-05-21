@@ -140,10 +140,10 @@ def run(goal : str, target : str,
         score = score_fn(monitor_loss, logprob, score_type=score_type)
         curr_adv.score, curr_adv.monitor_loss, curr_adv.logprob = score, monitor_loss, logprob
         
-        print(f'it={it} [best] score={best_adv.score:.3f} [curr] monitor loss={monitor_loss:.3f} [curr] logprob={logprob:.3f} prob={np.exp(logprob):.5f} [curr] len_adv={len(curr_adv.adv_str)}/{len(curr_adv.adv_ids[0])} adv_str: {curr_adv.adv_str} adv_ids: {curr_adv.adv_ids}')
+        print(f'it={it} [best] score={best_adv.score:.3f} [curr] monitor loss={monitor_loss:.3f} [curr] logprob={logprob:.3f} prob={np.exp(logprob):.5f} [curr] len_adv={len(curr_adv.adv_str)}/{len(curr_adv.adv_ids[0])} adv_str: {curr_adv.adv_str}')
         
         res_dict['optim_str'].append(curr_adv.adv_str)
-        res_dict['optim_ids'].append(curr_adv.adv_ids)
+        res_dict['optim_ids'].append(curr_adv.adv_ids.tolist())
         res_dict['monitor_loss'].append(float(monitor_loss))
         res_dict['logprob'].append(float(logprob))
         res_dict['score'].append(float(score))

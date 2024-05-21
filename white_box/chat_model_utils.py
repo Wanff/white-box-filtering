@@ -92,6 +92,12 @@ MODEL_CONFIGS = {
         "dtype": "bfloat16",
         "chat_template": "llamaguard", 
         "use_fast_tokenizer": False,
+    },
+    "gemma-2b": {
+        "model_name_or_path": "google/gemma-1.1-2b-it",
+        "dtype": "bfloat16",
+        "chat_template": "gemma",
+        "use_fast_tokenizer": False,
     }
 }
 
@@ -218,6 +224,10 @@ LLAMA2_HUNGARIAN_CHAT_TEMPLATE = {
     'prompt': "<|user|>\n{instruction}</s>\n<|assistant|>\n", 
 }
 
+GEMMA_PROMPT = {
+    "prompt": "<bos><start_of_turn>user\n{instruction}<end_of_turn>\n<start_of_turn>model"
+}
+
 INTERNLM_PROMPT = { # https://github.com/InternLM/InternLM/blob/main/tools/alpaca_tokenizer.py
     "description": "Template used by INTERNLM-chat",
     "prompt": "<|User|>:{instruction}<eoh><|Bot|>:"
@@ -334,6 +344,8 @@ def get_template(model_name_or_path=None, chat_template=None, fschat_template=No
         TEMPLATE = LLAMAGUARD_PROMPT
     elif chat_template == "llama-2-hungarian":
         TEMPLATE = LLAMA2_HUNGARIAN_CHAT_TEMPLATE
+    elif chat_template == "gemma":
+        TEMPLATE = GEMMA_PROMPT
     elif chat_template == "falcon_instruct": #falcon 7b / 40b instruct
         TEMPLATE = FALCON_INSTRUCT_PROMPT
     elif chat_template == "falcon_chat": #falcon 180B_chat

@@ -67,10 +67,7 @@ def main(args):
             last_token_idxs.append(len(input_ids[-1]) - 1)
         
         input_ids = tokenizer.pad({'input_ids': input_ids}, return_tensors='pt')['input_ids']
-        if args.head: 
-            labels = torch.tensor([example['label'] for example in examples])
-        else: 
-            labels = torch.tensor([example['label'] for example in examples])
+        labels = torch.tensor([example['label'] for example in examples])
         last_token_idxs = torch.tensor(last_token_idxs)
         return {'input_ids': input_ids, 'labels': labels, 'last_token_idxs': last_token_idxs}
     
@@ -162,7 +159,7 @@ def main(args):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_name', type=str, default='llama-2-7b-for-harm-classification', help='model name')
+    parser.add_argument('--model_name', type=str, default='gemma-2b', help='model name')
     parser.add_argument('--head', action='store_true', default=False, help='head')
     parser.add_argument('--dtype', type=str, default='bfloat16', help='dtype')
     parser.add_argument('--path', type=str, default='../data/llama2_7b')
