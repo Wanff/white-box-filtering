@@ -237,6 +237,26 @@ def acc_and_auc(preds, labels, only_acc = False):
     
     return acc, auc
 
+def intra_num_transfer(preds, labels): 
+    
+    false_negatives = (preds > 0.5) != labels
+    
+    num_transfer = [0 for _ in false_negatives]
+    for i, j in itertools.combinations(range(len(false_negatives)), 2):
+        num_transfer[i] += np.mean(false_negatives[i] & false_negatives[j])
+    return num_transfer
+
+def inter_num_transfer(preds1, preds2, labels):
+    
+    false_negatives1 = (preds1 > 0.5) != labels
+    false_negatives2 = (preds2 > 0.5) != labels
+    
+    num_transfer = [0 for _ in false_negatives1]
+    for i in range(len(false_negatives1)):
+        for j in range(len(false_negatives2)):
+            num_transfer[i] += np.mean(false_negatives1[i] & false_negatives2[j])
+    return num_transfer
+
 def main():
     args = parse_args()
     set_seed(args.seed)
@@ -311,6 +331,31 @@ def main():
     
     print(f"TT JB Acc: {np.mean(tt_jb_acc)} +/- {np.std(tt_jb_acc)}")
 
+    # num transfer 
+    pp_hb_transfer = intra_num_transfer(ams_hb_preds, hb_labels)
+    pp_gpt_transfer = intra_num_transfer(ams_gpt_preds, gpt_labels)
+    pp_jb_transfer = intra_num_transfer(ams_jb_preds, jb_labels)
+    
+    tt_hb_transfer = intra_num_transfer(tcs_hb_preds, hb_df['label'].values)
+    tt_gpt_transfer = intra_num_transfer(tcs_gpt_preds, gpt_df['label'].values)
+    tt_jb_transfer = intra_num_transfer(tcs_jb_preds, jb_df['label'].values)
+    
+    tp_hb_transfer = inter_num_transfer(ams_hb_preds, tcs_hb_preds, hb_df['label'].values)
+    tp_gpt_transfer = inter_num_transfer(ams_gpt_preds, tcs_gpt_preds, gpt_df['label'].values)
+    tp_jb_transfer = inter_num_transfer(ams_jb_preds, tcs_jb_preds, jb_df['label'].values)
+    
+    print(f"PP HB Transfer: {np.mean(pp_hb_transfer)}")
+    print(f"PP GPT Transfer: {np.mean(pp_gpt_transfer)}")
+    print(f"PP JB Transfer: {np.mean(pp_jb_transfer)}")
+    
+    print(f"TT HB Transfer: {np.mean(tt_hb_transfer)}")
+    print(f"TT GPT Transfer: {np.mean(tt_gpt_transfer)}")
+    print(f"TT JB Transfer: {np.mean(tt_jb_transfer)}")
+    
+    print(f"TP HB Transfer: {np.mean(tp_hb_transfer)}")
+    print(f"TP GPT Transfer: {np.mean(tp_gpt_transfer)}")
+    print(f"TP JB Transfer: {np.mean(tp_jb_transfer)}")
+    
     # decorrelation
     pp_hb_corr, pp_hb_errs = intra_group_corr(ams_hb_preds, hb_labels)
     pp_gpt_corr, pp_gpt_errs = intra_group_corr(ams_gpt_preds, gpt_labels)
