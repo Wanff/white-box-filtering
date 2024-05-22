@@ -5,4 +5,4 @@
 #SBATCH --job-name=fpr_seed_4
 #SBATCH --output=fpr_seed_4.out
 
-python eval.py --probe_type 'mlp'
+python eval.py --probe_type 'sk' --model_type "gemma-2b"

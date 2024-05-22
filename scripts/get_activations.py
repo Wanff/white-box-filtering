@@ -92,7 +92,7 @@ def get_mw(args):
         tokenizer = AutoTokenizer.from_pretrained(args.model_name, padding_side = args.padding_side)
         raise Exception("Template not set for chat models yet")
     
-    template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))['prompt']
+    template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))
     mw = ModelWrapper(model, tokenizer, template = template)
     return mw
 

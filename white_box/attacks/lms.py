@@ -40,7 +40,8 @@ class HuggingFace(LanguageModel):
                         temperature: float,
                         top_p: float = 1.0,
                         monitor : Monitor = None,
-                        adv_ids = None):
+                        adv_ids = None,
+                        pre_templated_prompts_list = None):
         if 'llama2' in self.model_name.lower():
             max_n_tokens += 1  # +1 to account for the first special token (id=29871) for llama2 models
         batch_size = len(full_prompts_list)
@@ -51,6 +52,7 @@ class HuggingFace(LanguageModel):
 
         output_hidden_states = True if isinstance(monitor, ActMonitor) else False
         # Batch generation
+        print(inputs)
         output = self.model.generate(
             **inputs,
             max_new_tokens=max_n_tokens,  
@@ -102,10 +104,22 @@ class HuggingFace(LanguageModel):
                             return_prompt_acts = True if monitor.monitor_type == "input" else False)
                 monitor_losses = monitor.get_loss(monitor_input)
             elif isinstance(monitor, TextMonitor):
-                adv_ids = adv_ids.to(monitor.after_ids.device)
-                ids = torch.cat([adv_ids, monitor.after_ids.repeat(adv_ids.shape[0], 1)], dim=1)
+                if adv_ids is not None:
+                    adv_ids = adv_ids.to(monitor.after_ids.device)
+                    ids = torch.cat([adv_ids, monitor.after_ids.repeat(adv_ids.shape[0], 1)], dim=1)
+                    monitor_losses = monitor.get_loss_no_grad(ids)
+                else:
+                    monitor_losses = []
+                    assert pre_templated_prompts_list is not None
+                    for prompt in pre_templated_prompts_list:
+                        ids = monitor.tokenizer(prompt, add_special_tokens = False, return_tensors = 'pt')['input_ids'].to(monitor.after_ids.device)
+                        # print(ids)
+                        # print(monitor.after_ids)
+                        ids = torch.cat([ids, monitor.after_ids], dim = 1)
+                        print(ids)
+                        monitor_losses.append(monitor.get_loss_no_grad(ids).item())
+                    monitor_losses = torch.tensor(monitor_losses)
                 # print(self.tokenizer.batch_decode(ids))
-                monitor_losses = monitor.get_loss_no_grad(ids)
             
             # print(monitor_losses)
             for i, out in enumerate(outputs):

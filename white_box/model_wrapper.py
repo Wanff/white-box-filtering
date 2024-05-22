@@ -373,7 +373,6 @@ class ModelWrapper(torch.nn.Module):
         if isinstance(prompts[0], str):
             if self.template is not None and use_chat_template:
                 prompts = [self.template['prompt'].format(instruction=s) for s in prompts]
-
             inputs = self.tokenizer(prompts, return_tensors="pt", padding=True, max_length=2048, truncation=True)
         else:
             inputs = self.tokenizer.pad({'input_ids': prompts}, padding = True, return_attention_mask=True)
@@ -384,7 +383,6 @@ class ModelWrapper(torch.nn.Module):
         else:
             input_ids = inputs.input_ids.to(self.model.device)
             attention_mask = inputs.attention_mask.to(self.model.device)
-        
         return input_ids, attention_mask
                 
     def batch_hiddens(self, 

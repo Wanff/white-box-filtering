@@ -16,7 +16,7 @@ def run(goal : str, target : str,
         max_n_attack_attempts : int = 5,
         
         ###### target params
-        target_model : str = "llama-2",
+        target_model : str = "llama2_7b",
         target_max_n_tokens : int = 150,
         
         ###### judge params
@@ -86,11 +86,7 @@ def run(goal : str, target : str,
         improv_list = [attack["improvement"] for attack in extracted_attack_list]
                 
         # Get target responses
-        if monitor is not None and isinstance(monitor, TextMonitor):
-            adv_ids = monitor.tokenizer(adv_prompt_list, return_tensors = "pt", padding = True, truncation = True)['input_ids'][:, 1:]
-            outputs = targetLM.get_response(adv_prompt_list, adv_ids = adv_ids)
-        else:
-            outputs = targetLM.get_response(adv_prompt_list)
+        outputs = targetLM.get_response(adv_prompt_list)
             
         target_response_list_for_judge = [out['text'] for out in outputs]
 

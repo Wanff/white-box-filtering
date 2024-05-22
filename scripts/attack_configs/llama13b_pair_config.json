@@ -2,7 +2,7 @@
     "attack_model": "vicuna",
     "attack_max_n_tokens": 500,
     "max_n_attack_attempts": 5,
-    "target_model": "llama2_7b",
+    "target_model": "llama2_13b",
     "target_max_n_tokens": 150,
     "judge_model": "rule-based",
     "judge_max_n_tokens": 50,

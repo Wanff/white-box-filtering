@@ -348,11 +348,13 @@ def run(
     gcg_losses = []
     early_stopping_condition = []
     optim_strings = []
+    optim_idss = []
     for i in range(config.num_steps):
         optim_ids = buffer.get_best_ids()
         
         optim_str = mw.tokenizer.decode(optim_ids.squeeze(0))
         optim_strings.append(optim_str)
+        optim_idss.append(optim_ids.tolist())
         print(f"step: {i} | optim_str: {optim_str} | lowest loss after sample_id: {buffer.get_lowest_loss()}")
 
         # Create the one-hot encoding matrix of our optimized token ids
@@ -397,7 +399,7 @@ def run(
         
         model_preds = torch.argmax(shift_logits, dim=-1)
         gcg_weight, monitor_weight, pre_softmax_gcg_weight, pre_softmax_monitor_weight = step_loss_weights(pre_softmax_gcg_weight, pre_softmax_monitor_weight, config.num_steps)
-
+        
         if config.use_loss_weight_sched:
             print(f'Pre softmax GCG weight: {pre_softmax_gcg_weight}, Pre softmax Monitor weight: {pre_softmax_monitor_weight}')
             print(f'GCG weight: {gcg_weight}, Monitor weight: {monitor_weight}')
@@ -498,6 +500,7 @@ def run(
         "monitor_losses": monitor_losses,
         "gcg_losses" : gcg_losses, 
         "optim_strings": optim_strings,
+        "optim_ids" : optim_ids,
         "early_stopping" : early_stopping_condition,
     }
             

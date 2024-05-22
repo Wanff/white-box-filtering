@@ -192,7 +192,7 @@ class TargetLM():
             else:
                 conv.append_message(conv.roles[1], None) 
                 if 'llama2' in self.model_name:
-                    full_prompts.append(conv.get_prompt() + " ")
+                    full_prompts.append(conv.get_prompt() + " ") #There is a space after the INST token that needs to get added
         
         # print(full_prompts)
         
@@ -201,7 +201,8 @@ class TargetLM():
                                                         temperature = self.temperature if temperature is None else temperature,
                                                         top_p = self.top_p,
                                                         monitor = self.monitor,
-                                                        adv_ids = adv_ids
+                                                        adv_ids = adv_ids,
+                                                        pre_templated_prompts_list= prompts_list
                                                     )
         self.n_input_tokens += sum(output['n_input_tokens'] for output in outputs)
         self.n_output_tokens += sum(output['n_output_tokens'] for output in outputs)
@@ -228,7 +229,7 @@ def load_indiv_model(model_name, device=None):
             use_fast=False
         ) 
 
-        if 'llama2' in model_path.lower():
+        if 'llama2' in model_name.lower():
             tokenizer.pad_token = tokenizer.unk_token
             tokenizer.padding_side = 'left'
             
