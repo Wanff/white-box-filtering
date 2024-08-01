@@ -315,7 +315,7 @@ MIXTRAL_PROMPT = {
 }
 ########## CHAT TEMPLATE ###########
 
-def get_template(model_name_or_path=None, chat_template=None, fschat_template=None, system_message=None, return_fschat_conv=False, **kwargs):
+def get_template(model_name_or_path=None, chat_template=None, fschat_template=None, system_message=None, return_fschat_conv=False, verbose=True, **kwargs):
     # ==== First check for fschat template ====
     if fschat_template or return_fschat_conv:
         fschat_conv = _get_fschat_conv(model_name_or_path, fschat_template, system_message)
@@ -382,9 +382,10 @@ def get_template(model_name_or_path=None, chat_template=None, fschat_template=No
         except:    
             assert TEMPLATE, f"Can't find instruction template for {model_name_or_path}, and apply_chat_template failed."
 
-    print("Found Instruction template for", model_name_or_path)
-    print(TEMPLATE)
-        
+    if verbose: 
+        print("Found Instruction template for", model_name_or_path)
+        print(TEMPLATE)
+            
     return TEMPLATE
 
 def _get_fschat_conv(model_name_or_path=None, fschat_template=None, system_message=None, **kwargs):

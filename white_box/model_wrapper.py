@@ -463,14 +463,10 @@ class ModelWrapper(torch.nn.Module):
                                    layers = None,
                                    tok_idxs = None,
                                    return_prompt_acts = False,
+                                   use_chat_template = True,
                                    **kwargs):
-        if isinstance(prompts[0], str):
-            inputs = self.tokenizer(prompts, return_tensors="pt", padding=True, max_length=512, truncation=True)
-        else:
-            inputs = self.tokenizer.pad({'input_ids': prompts}, padding = True, return_attention_mask=True)
-            
-        input_ids = inputs.input_ids.to(self.model.device)
-        attention_mask = inputs.attention_mask.to(self.model.device)
+
+        input_ids, attention_mask = self.process_prompts(prompts, use_chat_template = use_chat_template)
 
         out = self.model.generate(
                     input_ids=input_ids,

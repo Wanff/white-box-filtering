@@ -78,9 +78,10 @@ def run(goal : str, target : str,
         print("Finished getting adversarial prompts.")
         
         if None in extracted_attack_list:
-            print("Weird None found. Continuing.")
-            continue 
-
+            print("Weird None found. retrying.")
+            while None in extracted_attack_list:
+                extracted_attack_list = attackLM.get_attack(convs_list, processed_response_list)
+        
         # Extract prompts and improvements
         adv_prompt_list = [attack["prompt"] for attack in extracted_attack_list]
         improv_list = [attack["improvement"] for attack in extracted_attack_list]

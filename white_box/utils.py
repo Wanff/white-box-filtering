@@ -246,7 +246,7 @@ def rotation_cipher(text, shift):
     return ''.join(shifted_text)
 
 @torch.no_grad()
-def get_batched_preds(prompts: List[str], model: torch.nn.Module, tokenizer: AutoTokenizer, template: str, device: str, batch_size: int = 8) -> np.ndarray:
+def get_batched_preds(prompts: List[str], model: torch.nn.Module, tokenizer: AutoTokenizer, template: str, device: str, batch_size: int = 8, head=False) -> np.ndarray:
     
     preds = []
     for i in tqdm(range(0, len(prompts), batch_size)):
@@ -257,7 +257,10 @@ def get_batched_preds(prompts: List[str], model: torch.nn.Module, tokenizer: Aut
         last_token_idxs = toks['attention_mask'].sum(1) - 1
         
         output = model(**toks.to(device))   
-        preds.append(torch.stack([output.logits[torch.arange(len(current_batch_prompts)), last_token_idxs, 9109], output.logits[torch.arange(len(current_batch_prompts)), last_token_idxs, 25110]], dim=1).softmax(-1).cpu().detach().numpy()[:, 1])
+        if head: 
+            preds.append(output.logits[torch.arange(len(current_batch_prompts)), last_token_idxs].softmax(-1).cpu().detach().numpy()[:, 1])
+        else: 
+            preds.append(torch.stack([output.logits[torch.arange(len(current_batch_prompts)), last_token_idxs, 9109], output.logits[torch.arange(len(current_batch_prompts)), last_token_idxs, 25110]], dim=1).softmax(-1).cpu().detach().numpy()[:, 1])
         del toks
         del output
         torch.cuda.empty_cache()

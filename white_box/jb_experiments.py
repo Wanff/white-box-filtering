@@ -340,7 +340,7 @@ class AttackTransferPortal:
             if isinstance(adv_str, List):
                 adv_str = adv_str[0]
                 
-            prompt = advbench_behaviors.iloc[adv_idx]['goal'] + " " + adv_str
+            prompt = advbench_behaviors.iloc[adv_idx]['goal'] + adv_str
             # print(prompt)
         else:
             # print("Transfer from TM")
@@ -349,13 +349,13 @@ class AttackTransferPortal:
                 print(f"TM Monitor Loss in Log {tm_loss_from_log}")
             
             adv_str = self.tm_log['optim_strs'][adv_idx][step]
-            prompt = advbench_behaviors.iloc[adv_idx]['goal'] + " " + adv_str
+            prompt = advbench_behaviors.iloc[adv_idx]['goal'] + adv_str
             # print(prompt)
             
         state = self.mw.batch_hiddens([prompt])
         am_loss = self.am.get_loss(state['resid'][:, self.am.layer]).item()
         
-        self.tm.set_kv_cache(advbench_behaviors.iloc[adv_idx]['goal'] + " {optim_str}", log = False)
+        self.tm.set_kv_cache(advbench_behaviors.iloc[adv_idx]['goal'] + " {optim_str}", logging = False)
         self.tm.after_embeds = self.tm.model.get_input_embeddings()(self.tm.after_ids)
 
         optim_ids = self.tm.tokenizer(adv_str, return_tensors = 'pt', add_special_tokens=False)['input_ids'].to(self.tm.device)

@@ -70,7 +70,16 @@ class MLP(t.nn.Module, Probe):
             opt.step()
         
         return probe
-
+    
+    @staticmethod
+    def rand(d_in, d_hidden=32, n_hidden=2, device='cuda'):
+        """
+        Returns a probe with randomly initialized weights with the same architecture 
+        as the probe in the from_data function.
+        """
+        probe = MLP(d_in, 1, d_hidden, n_hidden, use_bias=True).to(device)
+        return probe
+    
 class MoEProbe(t.nn.Module, Probe):
     def __init__(self, d_m, probes, probe_type = "sk", use_bias=False, device = "cuda"):
         super().__init__()
@@ -157,7 +166,7 @@ class LRProbe(t.nn.Module, Probe):
         
         return probe
     
-    def from_weights(weights, bias = None, device = "cpu"):
+    def from_weights(weights, bias = None, device = "cuda"):
         probe = LRProbe(weights.shape[1], use_bias = bias is not None)
         probe.net[0].weight.data = weights.float().to(device)
         

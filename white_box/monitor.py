@@ -139,16 +139,14 @@ class TextMonitor(Monitor):
         return self.predict_proba(input_ids)
     
     @torch.no_grad()
-    def get_batched_preds(self, prompts: List[str], batch_size: int = 8) -> np.ndarray:
+    def get_batched_preds(self, prompts: List[str], batch_size: int = 8, add_instruct_prompt=True) -> np.ndarray:
         template =  get_template(self.model_name, chat_template=MODEL_CONFIGS[self.model_name].get('chat_template', None))['prompt']
         preds = []
         for i in tqdm(range(0, len(prompts), batch_size)):
             
             current_batch_prompts = prompts[i:i+batch_size]
-            if self.instruction_prompt is not None: 
-                template = get_template(self.model_name, chat_template=MODEL_CONFIGS[self.model_name].get('chat_template', None))['prompt']
+            if add_instruct_prompt:
                 current_batch_prompts = [template.format(instruction=prompt) for prompt in current_batch_prompts]
-            print(current_batch_prompts[0])
             toks = self.tokenizer(current_batch_prompts, return_tensors='pt', padding=True, truncation=True)
             last_token_idxs = toks['attention_mask'].sum(1) - 1
             
