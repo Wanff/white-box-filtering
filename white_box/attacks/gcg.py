@@ -29,6 +29,8 @@ class GCGConfig:
     use_search_width_sched : bool = False
     use_n_replace_sched : bool = True
     use_loss_weight_sched : bool = False
+    use_buffer : bool = True
+    use_random : bool = False
 
 class AttackBuffer:
     def __init__(self, size: int):
@@ -68,6 +70,38 @@ class AttackBuffer:
 def clear_gpus():
     gc.collect()
     torch.cuda.empty_cache()
+
+def sample_ids_randomly(
+    ids: Tensor, 
+    vocab_size: int,
+    search_width: int, 
+    n_replace: int = 1,
+):
+    """Returns `search_width` combinations of token ids by randomly sampling from all tokens.
+
+    Args:
+        ids : Tensor, shape = (n_optim_ids)
+            the sequence of token ids that are being optimized 
+        vocab_size : int
+            the size of the vocabulary from which tokens are sampled
+        search_width : int
+            the number of candidate sequences to return
+        n_replace: int
+            the number of token positions to update per sequence
+    
+    Returns:
+        sampled_ids : Tensor, shape = (search_width, n_optim_ids)
+            sampled token ids
+    """
+    n_optim_tokens = len(ids)
+    original_ids = ids.repeat(search_width, 1)
+
+    sampled_ids_pos = torch.stack([torch.randperm(n_optim_tokens, device=ids.device) for _ in range(search_width)])[..., :n_replace]
+    sampled_ids_val = torch.randint(vocab_size, (search_width, n_replace), device=ids.device)
+
+    new_ids = original_ids.scatter(1, sampled_ids_pos, sampled_ids_val)
+
+    return new_ids
     
 def sample_ids_from_grad(
     ids: Tensor, 
@@ -202,7 +236,6 @@ def compute_candidates_loss(
                 
             gcg_loss = torch.nn.functional.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1), reduction="none") 
             gcg_loss = gcg_loss.view(current_batch_size, -1).mean(dim=-1)
-            monitor_loss =  monitor_loss
             
             loss = gcg_weight * gcg_loss + monitor_weight * monitor_loss
             all_loss.append(loss)
@@ -320,6 +353,8 @@ def run(
 
     optim_ids = mw.tokenizer(config.optim_str_init, return_tensors="pt", add_special_tokens=False)["input_ids"].to(mw.model.device)
     
+    string = torch.cat([before_ids, optim_ids, after_ids, target_ids], dim=1)
+    print(f"string : {mw.tokenizer.decode(string.squeeze(0))}")
     buffer = AttackBuffer(config.buffer_size)
     buffer_ids = torch.stack([optim_ids] + gen_init_buffer_ids(mw, optim_ids.shape[1], config.buffer_size - 1)).squeeze(1)
     input_embeds = torch.cat([
@@ -350,7 +385,8 @@ def run(
     optim_strings = []
     optim_idss = []
     for i in range(config.num_steps):
-        optim_ids = buffer.get_best_ids()
+        if config.use_buffer:
+            optim_ids = buffer.get_best_ids()
         
         optim_str = mw.tokenizer.decode(optim_ids.squeeze(0))
         optim_strings.append(optim_str)
@@ -386,7 +422,6 @@ def run(
             
             monitor_loss = monitor.get_loss(monitor_input)
             
-            print(monitor_loss)
             del monitor_input
             del output
             clear_gpus()
@@ -438,13 +473,21 @@ def run(
         optim_ids_onehot_grad = torch.autograd.grad(outputs=[loss], inputs=[optim_ids_onehot])[0]
 
         # Sample candidate token sequences
-        sampled_ids = sample_ids_from_grad(
-            optim_ids.squeeze(0),
-            optim_ids_onehot_grad.squeeze(0),
-            search_width_sched(buffer.n_repeat),
-            config.topk,
-            n_replace_sched(i)
-        )
+        if config.use_random:
+            sampled_ids = sample_ids_randomly(
+                optim_ids.squeeze(0),
+                embedding_layer.num_embeddings,
+                search_width_sched(buffer.n_repeat),
+                n_replace_sched(i)
+            )
+        else:
+            sampled_ids = sample_ids_from_grad(
+                optim_ids.squeeze(0),
+                optim_ids_onehot_grad.squeeze(0),
+                search_width_sched(buffer.n_repeat),
+                config.topk,
+                n_replace_sched(i)
+            )
         
         sampled_ids = filter_ids(sampled_ids, mw.tokenizer)
         if len(sampled_ids) == 0:
@@ -500,7 +543,7 @@ def run(
         "monitor_losses": monitor_losses,
         "gcg_losses" : gcg_losses, 
         "optim_strings": optim_strings,
-        "optim_ids" : optim_ids,
+        "optim_ids" : optim_ids.detach().cpu().numpy().tolist(),
         "early_stopping" : early_stopping_condition,
     }
             

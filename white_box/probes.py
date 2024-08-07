@@ -72,12 +72,20 @@ class MLP(t.nn.Module, Probe):
         return probe
     
     @staticmethod
-    def rand(d_in, d_hidden=32, n_hidden=2, device='cuda'):
+    def rand(d_in, trained_probe, norm_match=False, d_hidden=32, n_hidden=2, device='cuda'): 
         """
         Returns a probe with randomly initialized weights with the same architecture 
         as the probe in the from_data function.
         """
         probe = MLP(d_in, 1, d_hidden, n_hidden, use_bias=True).to(device)
+        if norm_match:
+            for i, layer in enumerate(probe.net):
+                if isinstance(layer, t.nn.Linear):
+                    with t.no_grad():
+                        probe.net[i].weight.data /= t.norm(probe.net[i].weight.data)
+                        probe.net[i].weight.data *= t.norm(trained_probe.net[i].weight.data)
+                        probe.net[i].bias.data /= t.norm(probe.net[i].bias.data)
+                        probe.net[i].bias.data *= t.norm(trained_probe.net[i].bias.data)
         return probe
     
 class MoEProbe(t.nn.Module, Probe):

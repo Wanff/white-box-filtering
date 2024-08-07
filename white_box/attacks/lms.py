@@ -52,7 +52,7 @@ class HuggingFace(LanguageModel):
 
         output_hidden_states = True if isinstance(monitor, ActMonitor) else False
         # Batch generation
-        print(inputs)
+        # print(inputs)
         output = self.model.generate(
             **inputs,
             max_new_tokens=max_n_tokens,  
@@ -116,7 +116,7 @@ class HuggingFace(LanguageModel):
                         # print(ids)
                         # print(monitor.after_ids)
                         ids = torch.cat([ids, monitor.after_ids], dim = 1)
-                        print(ids)
+                        # print(ids)
                         monitor_losses.append(monitor.get_loss_no_grad(ids).item())
                     monitor_losses = torch.tensor(monitor_losses)
                 # print(self.tokenizer.batch_decode(ids))

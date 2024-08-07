@@ -10,7 +10,7 @@ import time
 import datasets
 from datasets import load_dataset
 from dataclasses import dataclass
-from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSequenceClassification
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSequenceClassification, AutoConfig
 import argparse 
 import json
 from peft import AutoPeftModelForSequenceClassification, AutoPeftModelForCausalLM
@@ -24,7 +24,7 @@ from white_box.dataset import clean_data
 from white_box.chat_model_utils import load_model_and_tokenizer, get_template, MODEL_CONFIGS
 
 from white_box.dataset import PromptDist, ActDataset, create_prompt_dist_from_metadata_path, ProbeDataset
-from white_box.probes import LRProbe
+from white_box.probes import MLP, LRProbe
 from white_box.monitor import ActMonitor, TextMonitor
 
 from white_box.attacks.gcg import GCGConfig
@@ -97,25 +97,48 @@ if __name__=="__main__":
         dataset.instantiate()
         probe_dataset = ProbeDataset(dataset)
 
-        if args.probe_type == "sk":
-            acc, auc, probe = probe_dataset.train_sk_probe(layer, tok_idxs = [int(i) for i in args.tok_idxs], test_size = None, C = args.probe_reg, max_iter = args.max_iter, use_train_test_split=False, device='cuda')
-        elif args.probe_type == "mm":
-            acc, auc, probe = probe_dataset.train_mm_probe(layer, tok_idxs= [int(i) for i in args.tok_idxs], test_size=None)
-        elif args.probe_type == "mlp":
-            acc, auc, probe = probe_dataset.train_mlp_probe(layer, tok_idxs= [int(i) for i in args.tok_idxs], test_size=None,
+        train_tok_idxs = [int(i) for i in args.tok_idxs if int(i) < 0 and int(i) >= -5]
+        if "sk" in args.probe_type:
+            acc, auc, probe = probe_dataset.train_sk_probe(layer, tok_idxs = train_tok_idxs, test_size = None, C = args.probe_reg, max_iter = args.max_iter, use_train_test_split=False, device='cuda')
+        elif "mm" in args.probe_type:
+            acc, auc, probe = probe_dataset.train_mm_probe(layer, tok_idxs= train_tok_idxs, test_size=None)
+        elif "mlp" in args.probe_type:
+            acc, auc, probe = probe_dataset.train_mlp_probe(layer, tok_idxs= train_tok_idxs, test_size=None,
                                                             weight_decay = 1, lr = 0.0001, epochs = 5000)
         print(acc, auc)
         
-        if args.monitor_type == "act_rand":
-            trained_probe = probe
-            
-            probe  = LRProbe.from_weights(torch.rand_like(probe.net[0].weight.data), torch.rand_like(probe.net[0].bias.data)) #random probe
-            print(probe.net[0].weight.data)
+        if args.probe_type == "mlp_rand":
+            trained_probe = probe 
+            print( "data shape", trained_probe.net[0].weight.data.shape[1])
+            probe = MLP.rand(trained_probe.net[0].weight.data.shape[1], trained_probe)
             print("Acc of Random Probe")
-            print(probe_dataset.idxs_probe_gets_wrong(probe, layer, tok_idxs = list(range(5))))
-            print(f"Cosine Similarity of Random Probe to Learned Probe: {torch.nn.functional.cosine_similarity(probe.net[0].weight.data, trained_probe.net[0].weight.data)}")
+            print(probe_dataset.get_probe_accuracy(probe, layer, tok_idxs = train_tok_idxs))
+        elif args.probe_type == "mlp_rand_norm_match":
+            trained_probe = probe
+            print( "data shape", trained_probe.net[0].weight.data.shape[1])
+            probe = MLP.rand(trained_probe.net[0].weight.data.shape[1], trained_probe, norm_match=True)
+            print("Acc of Random Probe")
+            print(probe_dataset.get_probe_accuracy(probe, layer, tok_idxs = train_tok_idxs))
             
         monitor = ActMonitor(probe = probe, layer = layer, tok_idxs = [int(i) for i in args.tok_idxs])
+        
+        if args.probe_type == 'sk_rand_unit_norm':
+            print('making probe random')
+            print(torch.norm(monitor.probe.net[0].weight.data))
+            orig_weight_norm, orig_bias_norm = torch.norm(monitor.probe.net[0].weight.data), torch.norm(monitor.probe.net[0].bias.data)
+            monitor.probe.net[0].weight.data = torch.randn_like(monitor.probe.net[0].weight.data) 
+            monitor.probe.net[0].weight.data /= torch.norm(monitor.probe.net[0].weight.data)
+            monitor.probe.net[0].bias.data = torch.randn_like(monitor.probe.net[0].bias.data)
+            monitor.probe.net[0].bias.data /= torch.norm(monitor.probe.net[0].bias.data)
+            print(torch.norm(monitor.probe.net[0].weight.data))
+            print(probe_dataset.get_probe_accuracy(monitor.probe, layer, tok_idxs = train_tok_idxs))
+        elif args.probe_type == 'sk': 
+            
+            orig_weights, orig_bias = monitor.probe.net[0].weight.data.clone(), monitor.probe.net[0].bias.data.clone()
+            monitor.probe.net[0].weight.data = orig_weights
+            monitor.probe.net[0].bias.data = orig_bias
+            print(probe_dataset.get_probe_accuracy(monitor.probe, layer, tok_idxs = train_tok_idxs))
+        
     elif args.monitor_type == "text":
         if args.monitor_path is not None: 
             if "peft" in args.monitor_path:
@@ -123,6 +146,9 @@ if __name__=="__main__":
                     torch_dtype=torch.float16, 
                     device_map="auto")
                 model = model.merge_and_unload()
+            elif "rand" in args.monitor_path:
+                config = AutoConfig.from_pretrained("meta-llama/LlamaGuard-7b")
+                model = AutoModelForCausalLM.from_config(config).half().to('cuda')
             else:
                 if 'head' in args.text_monitor_config:
                     model = AutoModelForSequenceClassification.from_pretrained(args.monitor_path, 
@@ -136,6 +162,7 @@ if __name__=="__main__":
             model = AutoModelForCausalLM.from_pretrained("meta-llama/LlamaGuard-7b", 
                 torch_dtype=torch.float16, 
                 device_map="auto")
+        
         tokenizer = AutoTokenizer.from_pretrained(
             "meta-llama/LlamaGuard-7b",
             use_fast = False,

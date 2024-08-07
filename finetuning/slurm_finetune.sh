@@ -1,9 +1,15 @@
 #!/bin/bash
 #SBATCH --nodes=1
 #SBATCH --gpus-per-node=1
-#SBATCH --time=02:00:00
-#SBATCH --job-name=gemma-2b
-#SBATCH --output=gemma-2b.out
+#SBATCH --time=04:00:00
+#SBATCH --job-name=llamaguard_1_epoch
+#SBATCH --output=llamaguard_1_epoch.out
+
+# SIMPLE FINETUNE
+
+python classifier_finetune.py
+
+# FULL FINETUNE WITH SEEDS
 
 # for seed in 0 1 2 3 4; do
 #     python classifier_finetune.py \
@@ -13,13 +19,13 @@
 
 # SMALL CLASSIFIER FINETUNE
 
-for seed in 0 1 2 3 4; do
-    python classifier_finetune.py \
-        --seed $seed \
-        --model_name "gemma-2b" \
-        --head
-    echo "Done with seed $seed"
-done
+# for seed in 0 1 2 3 4; do
+#     python classifier_finetune.py \
+#         --seed $seed \
+#         --model_name "gemma-2b" \
+#         --head
+#     echo "Done with seed $seed"
+# done
 
 # LLAMA2 INSTEAD OF LLAMAGUARD
 

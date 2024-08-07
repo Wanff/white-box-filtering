@@ -7,7 +7,7 @@
     "judge_model": "rule-based",
     "judge_max_n_tokens": 50,
     "judge_temperature": 0,
-    "n_streams": 3,
+    "n_streams": 1,
     "keep_last_n": 3,
     "n_iterations": 20,
     "score_type": "monitor"

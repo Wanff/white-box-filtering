@@ -123,10 +123,36 @@
 #         --padding_side "right" \
 #         --file_spec "jb_"
 
+# python get_activations.py \
+#         --model_name "llamaguard" \
+#         --dataset_name_or_path "../datasets/all_harmbench_alpaca_metadata.csv" \
+#         --save_path "../data/llamaguard/" \
+#         --tok_idxs -1 -2 -3 -4 -5 \
+#         --padding_side "right" \
+#         --file_spec "all_harmbench_alpaca_"
+
+# REBUTTAL GENERALIZATION DATASETS
+
+# python get_activations.py \
+#         --model_name "gemma2_9b" \
+#         --dataset_name_or_path "../datasets/harmbench_alpaca_metadata.csv" \
+#         --save_path "../data/gemma2_9b/" \
+#         --tok_idxs -1 -2 -3 -4 -5 \
+#         --padding_side "right" \
+#         --file_spec "harmbench_alpaca_"
+
 python get_activations.py \
-        --model_name "llamaguard" \
-        --dataset_name_or_path "../datasets/all_harmbench_alpaca_metadata.csv" \
-        --save_path "../data/llamaguard/" \
+        --model_name "mistral2_7b" \
+        --dataset_name_or_path "../datasets/harmbench_alpaca_metadata.csv" \
+        --save_path "../data/mistral2_7b/" \
         --tok_idxs -1 -2 -3 -4 -5 \
         --padding_side "right" \
-        --file_spec "all_harmbench_alpaca_"
+        --file_spec "harmbench_alpaca_"
+
+# python get_activations.py \
+#         --model_name "llama2_7b" \
+#         --dataset_name_or_path "../data/llama2_7b/openhermes.csv" \
+#         --save_path "../data/llama2_7b/" \
+#         --tok_idxs -1 -2 -3 -4 -5 \
+#         --padding_side "right" \
+#         --file_spec "openhermes_"

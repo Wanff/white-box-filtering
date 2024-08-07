@@ -269,6 +269,7 @@ def slice_acts(out, N_TOKS: int, return_prompt_acts: bool, layers: List, tok_idx
 
     if N_TOKS == 0:
         acts = torch.stack(out.hidden_states, dim = 1) #this is when you just call model(), not generate
+        #model() gives you  batch size x n_layers x seq_len x d_m
     elif N_TOKS == 1:
         # acts = torch.stack([torch.cat(out.hidden_states[0], dim = 1)], dim = 1)  #1, N_TOKS bc the first index is all previous tokens
         acts = torch.stack(out.hidden_states[0], dim = 0) #shape: n_layers + 1 x batch_size x seq_len x d_M
@@ -283,7 +284,7 @@ def slice_acts(out, N_TOKS: int, return_prompt_acts: bool, layers: List, tok_idx
     #shape: batch_size x N_TOKS - 1 x n_layers + 1 x d_M
     #n_layers + 1 bc of embedding, N_TOKS - 1 bc of how max_new_tokens works
 
-    if return_prompt_acts:
+    if return_prompt_acts: #only uses for .generate()
         prompt_acts = torch.stack(out.hidden_states[0], dim = 0) #shape: n_layers + 1 x batch_size x seq_len x d_M
         prompt_acts = rearrange(prompt_acts, 'l b t d -> b l t d')
         # print(prompt_acts.shape)

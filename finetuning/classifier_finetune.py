@@ -31,6 +31,8 @@ def main(args):
     model.config.pad_token_id = tokenizer.eos_token_id
     template = get_template(args.model_name, chat_template=model_config.get('chat_template', None))['prompt']
 
+    print('will save final model as ', f'{args.path}/{args.model_name}_{"head" if args.head else "causal"}_{'peft' if args.use_peft else 'no_peft'}_{args.train_file_spec}_model_{args.seed}')
+
     if args.use_peft:
         peft_config = LoraConfig(
             target_modules=["a_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "embed_tokens", "Im_head"],
@@ -77,7 +79,7 @@ def main(args):
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
     lr_scheduler = get_linear_schedule_with_warmup(
         optimizer=optimizer,
-        num_warmup_steps=len(train_dataloader) * 0.05, 
+        num_warmup_steps=len(train_dataloader) * 0.1, 
         num_training_steps=(len(train_dataloader) * args.num_epochs),
     )
 
@@ -154,18 +156,18 @@ def main(args):
             print(f"{epoch} | {test_file_spec} | Test Loss: {test_epoch_loss} | Test Acc: {test_acc}")
         
         if not args.no_save_at_end:
-            model.save_pretrained(f'{args.path}/{args.model_name}_{"head" if args.head else "causal"}_{args.train_file_spec}_model_{epoch}_{args.seed}')
+            model.save_pretrained(f'{args.path}/{args.model_name}_{"head" if args.head else "causal"}_{'peft' if args.use_peft else 'no_peft'}_{args.train_file_spec}_model_{epoch}_{args.seed}')
         
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_name', type=str, default='gemma-2b', help='model name')
+    parser.add_argument('--model_name', type=str, default='llamaguard', help='model name')
     parser.add_argument('--head', action='store_true', default=False, help='head')
     parser.add_argument('--dtype', type=str, default='bfloat16', help='dtype')
     parser.add_argument('--path', type=str, default='../data/llama2_7b')
     parser.add_argument('--train_file_spec', type=str, default='harmbench_alpaca_metadata')
     parser.add_argument('--test_file_spec', nargs='+', default=['harmbench_alpaca_test_metadata'])
-    parser.add_argument('--seed', type=int, default=0, help='seed')
+    parser.add_argument('--seed', type=int, default=101, help='seed')
     parser.add_argument('--lr', type=float, default=1e-5, help='learning rate')
     parser.add_argument('--batch_size', type=int, default=1, help='batch size per device')
     parser.add_argument('--accumulation_steps', type=int, default=16, help='accumulation steps')

@@ -51,7 +51,7 @@ MODEL_CONFIGS = {
         "dtype": "float16",
         "chat_template": "llama-2"
     },
-    "mistralai/Mistral-7B-Instruct-v0.2" : {
+    "mistral2_7b" : {
         "model_name_or_path" : "mistralai/Mistral-7B-Instruct-v0.2",
         "use_fast_tokenizer": False,
         "dtype" : "float16",
@@ -98,7 +98,14 @@ MODEL_CONFIGS = {
         "dtype": "bfloat16",
         "chat_template": "gemma",
         "use_fast_tokenizer": False,
-    }
+    },
+    "gemma2_9b" : {
+        "model_name_or_path": "google/gemma-2-9b-it",  
+        "use_fast_tokenizer": False,
+        "chat_template" :"gemma",
+        "dtype" : "float16",
+        "device_map" : "auto"
+    },
 }
 
 LORA_MODELS = {

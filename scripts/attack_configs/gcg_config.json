@@ -1,5 +1,5 @@
 {
-    "num_steps": 500,
+    "num_steps": 100,
     "optim_str_init": "! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !",
     "search_width": 48,
     "topk": 256,

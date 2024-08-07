@@ -1,0 +1,23 @@
+{
+    "score_type" : "monitor", 
+    "prompt_template": "best_llama2",
+    "n_iterations": 1000,
+    "n_chars_adv": 100,
+    "n_chars_change_max": 0,
+    "n_tokens_adv": 25,
+    "n_tokens_change_max": 8,
+    "schedule_n_to_change": true,
+    "schedule_prob": true,
+    "n_restarts": 1,
+    "target_model": "llama2_7b",
+    "target_max_n_tokens": 150,
+    "judge_model": "rule-based",
+    "judge_max_n_tokens": 50,
+    "judge_temperature": 0,
+    "judge_top_p": 1.0,
+    "judge_max_n_calls": 1,
+
+    "seed": 1,
+
+    "search_width" : 8
+}

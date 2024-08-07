@@ -33,13 +33,13 @@ def main(args):
     
     set_seed(args.seed)
     
-    model_config = MODEL_CONFIGS['llamaguard']
-    model, tokenizer = load_model_and_tokenizer(**model_config, padding_side='right', model_override = f'../data/llama2_7b/llamaguard_harmbench_alpaca_metadata_model_0_{args.seed}')
-    template = get_template('llamaguard', chat_template=model_config.get('chat_template', None))['prompt']
+    model_config = MODEL_CONFIGS['gemma-2b']
+    model, tokenizer = load_model_and_tokenizer(**model_config, padding_side='right', model_override = f'../data/llama2_7b/gemma-2b_head_harmbench_alpaca_metadata_model_0_{args.seed}')
+    template = get_template('gemma', chat_template=model_config.get('chat_template', None))['prompt']
 
     alpaca_negatives = pd.read_csv('../data/llama2_7b/alpaca_negatives_metadata.csv')['prompt'].tolist()
-    preds = get_batched_preds(alpaca_negatives, model, tokenizer, template, 'cuda', batch_size=16)
-    np.save(f'../data/llama2_7b/alpaca_negatives_preds_{args.seed}.npy', preds)
+    preds = get_batched_preds(alpaca_negatives, model, tokenizer, template, 'cuda', batch_size=64, head=True)
+    np.save(f'../data/llama2_7b/gemma_alpaca_negatives_preds_{args.seed}.npy', preds)
     
 if __name__ == '__main__':
     
